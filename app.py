@@ -1,0 +1,303 @@
+# ============================================
+# AutoScout24 Kereső – Flask Webszerver
+# ============================================
+# Telepítés:
+#   pip install flask playwright openpyxl
+#   playwright install chromium
+#
+# Futtatás:
+#   python app.py
+# Majd nyisd meg: http://localhost:5000
+# ============================================
+
+from flask import Flask, render_template, request, jsonify, send_file
+from playwright.sync_api import sync_playwright
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+import time, os, re, threading, uuid, json
+
+app = Flask(__name__)
+
+# Scraping állapot tárolása (job_id → státusz/eredmény)
+jobs = {}
+
+BRANDS = {
+    "Audi":       ["A1","A2","A3","A4","A5","A6","A7","A8","Q3","Q5","Q7","TT","R8"],
+    "BMW":        ["1-es","2-es","3-as","4-es","5-ös","6-os","7-es","X1","X3","X5","Z4","M3","M5"],
+    "Mercedes":   ["A","B","C","E","S","GLA","GLC","GLE","GLK","CLA","CLS","SLK"],
+    "Volkswagen": ["Golf","Polo","Passat","Tiguan","Touareg","T-Roc","ID.3","ID.4","Caddy","Sharan"],
+    "Ford":       ["Focus","Fiesta","Mondeo","Kuga","Puma","Mustang","Galaxy","S-Max","Transit"],
+    "Opel":       ["Astra","Corsa","Insignia","Zafira","Mokka","Crossland","Grandland"],
+    "Toyota":     ["Yaris","Corolla","Camry","RAV4","C-HR","Prius","Land Cruiser","Hilux"],
+    "Honda":      ["Civic","Jazz","CR-V","HR-V","Accord","FR-V"],
+    "Peugeot":    ["107","206","207","208","307","308","407","508","2008","3008","5008"],
+    "Renault":    ["Clio","Megane","Laguna","Kangoo","Scenic","Captur","Zoe","Kadjar"],
+    "Seat":       ["Ibiza","Leon","Toledo","Altea","Arona","Ateca","Tarraco"],
+    "Skoda":      ["Fabia","Octavia","Superb","Kodiaq","Karoq","Rapid","Scala"],
+    "Fiat":       ["500","Punto","Bravo","Tipo","Panda","Doblo","Stilo"],
+    "Kia":        ["Picanto","Rio","Ceed","Sportage","Sorento","Stonic","Niro","EV6"],
+    "Hyundai":    ["i20","i30","i40","Tucson","Santa Fe","Kona","Ioniq"],
+    "Mazda":      ["2","3","6","CX-3","CX-5","CX-30","MX-5"],
+    "Nissan":     ["Micra","Juke","Qashqai","X-Trail","Leaf","370Z","Navara"],
+    "Volvo":      ["S40","S60","S80","V40","V60","V90","XC40","XC60","XC90"],
+    "Porsche":    ["911","Cayenne","Macan","Panamera","Taycan","Boxster","Cayman"],
+    "Alfa Romeo": ["147","156","159","Giulia","Stelvio","MiTo","Giulietta"],
+}
+
+COUNTRIES = {
+    "Egész Európa":  "",
+    "Németország":   "D",
+    "Ausztria":      "A",
+    "Magyarország":  "H",
+    "Olaszország":   "I",
+    "Franciaország": "F",
+    "Spanyolország": "E",
+    "Belgium":       "B",
+    "Hollandia":     "NL",
+    "Lengyelország": "PL",
+    "Csehország":    "CZ",
+    "Svájc":         "CH",
+    "Svédország":    "S",
+    "Dánia":         "DK",
+    "Portugália":    "P",
+    "Románia":       "RO",
+    "Horvátország":  "HR",
+    "Szerbia":       "SRB",
+    "Luxemburg":     "L",
+}
+
+@app.route("/")
+def index():
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+
+@app.route("/models/<brand>")
+def get_models(brand):
+    return jsonify(BRANDS.get(brand, []))
+
+@app.route("/search", methods=["POST"])
+def search():
+    data = request.json
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {"status": "running", "progress": 0, "log": [], "cars": []}
+    thread = threading.Thread(target=run_scrape, args=(job_id, data))
+    thread.daemon = True
+    thread.start()
+    return jsonify({"job_id": job_id})
+
+@app.route("/status/<job_id>")
+def status(job_id):
+    job = jobs.get(job_id, {})
+    return jsonify(job)
+
+@app.route("/download/<job_id>")
+def download(job_id):
+    job = jobs.get(job_id)
+    if not job or not job.get("cars"):
+        return "Nincs adat", 404
+    filepath = os.path.join("outputs", f"{job_id}.xlsx")
+    os.makedirs("outputs", exist_ok=True)
+    save_to_excel(job["cars"], filepath, job["brand"], job["model"])
+    return send_file(filepath, as_attachment=True,
+                     download_name=f"{job['brand']}_{job['model']}_lista.xlsx")
+
+def log(job_id, msg):
+    jobs[job_id]["log"].append(msg)
+    print(msg)
+
+def run_scrape(job_id, data):
+    brand      = data.get("brand", "")
+    model      = data.get("model", "")
+    year_from  = data.get("year_from") or None
+    year_to    = data.get("year_to") or None
+    price_from = data.get("price_from") or None
+    price_to   = data.get("price_to") or None
+    country    = COUNTRIES.get(data.get("country", "Egész Európa"), "")
+
+    jobs[job_id]["brand"] = brand
+    jobs[job_id]["model"] = model
+
+    brand_slug = brand.lower().replace(" ", "-")
+    model_slug = model.lower().replace(" ", "-")
+    cars = []
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+                locale="hu-HU",
+            )
+            context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
+            page = context.new_page()
+
+            for page_num in range(1, 11):
+                params = f"page={page_num}"
+                if year_from:  params += f"&fregfrom={year_from}"
+                if year_to:    params += f"&fregto={year_to}"
+                if price_from: params += f"&pricefrom={price_from}"
+                if price_to:   params += f"&priceto={price_to}"
+                if country:    params += f"&cy={country}"
+                if year_from or year_to:
+                    params += "&sort=age&desc=1"
+                elif price_from or price_to:
+                    params += "&sort=price&desc=0"
+
+                url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
+                log(job_id, f"📄 Oldal betöltése: {page_num}")
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+                if page_num == 1:
+                    for selector in ["button[id='didomi-notice-agree-button']",
+                                     "button:has-text('Accept All')", "button:has-text('Accept all')"]:
+                        try:
+                            btn = page.locator(selector).first
+                            if btn.is_visible(timeout=2000):
+                                btn.click()
+                                log(job_id, "✅ Cookie elfogadva")
+                                time.sleep(1)
+                                break
+                        except Exception:
+                            continue
+
+                try:
+                    page.wait_for_selector("a[href*='/offers/']", timeout=10000)
+                except Exception:
+                    time.sleep(3)
+
+                articles = page.locator("article").all()
+                if not articles:
+                    log(job_id, "⛔ Nincs több találat")
+                    break
+
+                log(job_id, f"  → {len(articles)} hirdetés")
+
+                for article in articles:
+                    try:
+                        title = ""
+                        try:
+                            title = article.locator("h2").first.inner_text(timeout=1000).strip()
+                        except Exception:
+                            pass
+
+                        price = ""
+                        try:
+                            price = article.locator("[class*='Price'], [class*='price']").first.inner_text(timeout=1000).strip()[:8]
+                            if price.endswith("11"):
+                                price = price[:-1]
+                        except Exception:
+                            pass
+
+                        details = []
+                        try:
+                            spans = article.locator("dl span, [class*='VehicleDetails'] span, [class*='vehicle-detail'] span").all()
+                            for s in spans[:6]:
+                                t = s.inner_text(timeout=500).strip()
+                                if t and t not in details:
+                                    details.append(t)
+                        except Exception:
+                            pass
+
+                        location = ""
+                        for loc_sel in ["[data-testid='seller-address']","[data-testid='location']",
+                                        "[class*='seller-address']","[class*='sellerAddress']","address",
+                                        "[class*='Location']","[class*='location']","[class*='seller']"]:
+                            try:
+                                el = article.locator(loc_sel).first
+                                if el.is_visible(timeout=500):
+                                    txt = el.inner_text(timeout=500).strip()
+                                    if txt and len(txt) > 2:
+                                        location = txt
+                                        break
+                            except Exception:
+                                continue
+                        if not location:
+                            try:
+                                full_text = article.inner_text(timeout=1000)
+                                match = re.search(r'\b([A-Z]{1,3}-\s*\d{4,5}[\s\S]{0,30})', full_text)
+                                if match:
+                                    location = match.group(1).split('\n')[0].strip()
+                            except Exception:
+                                pass
+
+                        link = ""
+                        try:
+                            for anchor in article.locator("a").all():
+                                try:
+                                    href = anchor.get_attribute("href", timeout=500)
+                                    if not href:
+                                        continue
+                                    full = "https://www.autoscout24.com" + href if href.startswith("/") else href
+                                    skip = ["/search", "/lst/", "/account", "/login", "/help", "/static", "javascript", "#"]
+                                    if any(s in full for s in skip):
+                                        continue
+                                    if "autoscout24.com" in full and len(href) > 5:
+                                        link = full
+                                        break
+                                except Exception:
+                                    continue
+                        except Exception:
+                            pass
+
+                        if title:
+                            cars.append({"Cím": title, "Ár": price,
+                                         "Részletek": " | ".join(details),
+                                         "Helyszín": location, "Link": link})
+                    except Exception:
+                        continue
+
+                jobs[job_id]["progress"] = page_num * 10
+
+            browser.close()
+
+        def parse_price(car):
+            digits = re.sub(r'[^\d]', '', car["Ár"])
+            return int(digits) if digits else 0
+        cars.sort(key=parse_price)
+
+        jobs[job_id]["cars"] = cars
+        jobs[job_id]["status"] = "done"
+        log(job_id, f"🎉 Kész! {len(cars)} hirdetés összegyűjtve.")
+
+    except Exception as e:
+        jobs[job_id]["status"] = "error"
+        log(job_id, f"❌ Hiba: {e}")
+
+def save_to_excel(cars, filepath, brand, model):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{brand} {model}"
+    headers = ["#", "Cím", "Ár", "Részletek", "Helyszín", "Link"]
+    header_fill = PatternFill("solid", start_color="1F3864")
+    header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 22
+    for i, car in enumerate(cars, 1):
+        row = i + 1
+        fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
+        values = [i, car["Cím"], car["Ár"], car["Részletek"], car["Helyszín"], car["Link"]]
+        for col, val in enumerate(values, 1):
+            cell = ws.cell(row=row, column=col, value=val)
+            cell.fill = fill
+            cell.alignment = Alignment(vertical="center")
+            if col == 6 and val:
+                cell.hyperlink = val
+                cell.value = "Open"
+                cell.font = Font(name="Arial", size=10, color="0563C1", underline="single")
+            else:
+                cell.font = Font(name="Arial", size=10)
+    for col, width in enumerate([5, 35, 15, 45, 30, 10], 1):
+        ws.column_dimensions[ws.cell(1, col).column_letter].width = width
+    ws.freeze_panes = "A2"
+    wb.save(filepath)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)

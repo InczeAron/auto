@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoScout24 Kereső</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f0f2f5; min-height: 100vh; }
+
+  header {
+    background: #1F3864;
+    color: white;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  header h1 { font-size: 22px; font-weight: bold; }
+  header span { font-size: 13px; opacity: 0.75; }
+
+  .container { max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+
+  .card {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  .card h2 { font-size: 16px; color: #1F3864; margin-bottom: 20px; border-bottom: 2px solid #e8edf5; padding-bottom: 10px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px 20px; }
+  .full { grid-column: 1 / -1; }
+
+  label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 5px; }
+  select, input {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #d0d7e3;
+    border-radius: 6px; font-size: 14px; background: #fafbfd;
+    transition: border-color 0.2s;
+  }
+  select:focus, input:focus { outline: none; border-color: #1F3864; background: white; }
+
+  .range-group { display: flex; gap: 8px; align-items: center; }
+  .range-group select { flex: 1; }
+  .range-group span { color: #888; font-size: 13px; white-space: nowrap; }
+
+  .btn-search {
+    background: #1F3864; color: white; border: none;
+    padding: 12px 36px; border-radius: 8px; font-size: 15px;
+    font-weight: bold; cursor: pointer; transition: background 0.2s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-search:hover { background: #162d52; }
+  .btn-search:disabled { background: #9aabcc; cursor: not-allowed; }
+
+  .btn-download {
+    background: #1a7a4a; color: white; border: none;
+    padding: 10px 28px; border-radius: 8px; font-size: 14px;
+    font-weight: bold; cursor: pointer; transition: background 0.2s;
+    display: none; align-items: center; gap: 8px;
+  }
+  .btn-download:hover { background: #145c38; }
+  .btn-download.visible { display: flex; }
+
+  #progress-section { display: none; }
+  .progress-bar-wrap { background: #e8edf5; border-radius: 8px; height: 10px; overflow: hidden; margin: 12px 0; }
+  .progress-bar { height: 10px; background: #1F3864; border-radius: 8px; width: 0%; transition: width 0.4s; }
+
+  #log-box {
+    background: #0d1117; color: #58d68d; font-family: monospace;
+    font-size: 13px; padding: 14px; border-radius: 8px;
+    height: 180px; overflow-y: auto; margin-top: 10px;
+  }
+
+  #results-section { display: none; }
+  .results-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 16px; }
+  thead tr { background: #1F3864; color: white; }
+  thead th { padding: 10px 12px; text-align: left; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #f0f4fb; }
+  tbody tr:hover { background: #dce6f1; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #e8edf5; vertical-align: middle; }
+  tbody td a { color: #1a5276; text-decoration: none; font-weight: 600; }
+  tbody td a:hover { text-decoration: underline; }
+  .badge { background: #e8edf5; color: #444; border-radius: 4px; padding: 2px 7px; font-size: 12px; }
+
+  .status-done { color: #1a7a4a; font-weight: bold; }
+  .status-error { color: #c0392b; font-weight: bold; }
+
+  @media (max-width: 640px) {
+    .grid, .grid-3 { grid-template-columns: 1fr; }
+    .full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+    <rect width="32" height="32" rx="8" fill="white" fill-opacity="0.15"/>
+    <path d="M6 22 L16 10 L26 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="16" cy="10" r="2.5" fill="white"/>
+  </svg>
+  <div>
+    <h1>AutoScout24 Kereső</h1>
+    <span>Hirdetések gyűjtése és Excel exportálás</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Szűrők -->
+  <div class="card">
+    <h2>🔍 Keresési szűrők</h2>
+    <div class="grid">
+      <div>
+        <label>Márka</label>
+        <select id="brand" onchange="loadModels()">
+          {% for brand in brands %}
+          <option>{{ brand }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Modell</label>
+        <select id="model"></select>
+      </div>
+
+      <div>
+        <label>Évjárat</label>
+        <div class="range-group">
+          <select id="year_from">
+            <option value="">–</option>
+            {% for y in range(2025, 1989, -1) %}
+            <option value="{{ y }}">{{ y }}</option>
+            {% endfor %}
+          </select>
+          <span>–</span>
+          <select id="year_to">
+            <option value="">–</option>
+            {% for y in range(2025, 1989, -1) %}
+            <option value="{{ y }}">{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label>Ár (€)</label>
+        <div class="range-group">
+          <select id="price_from">
+            <option value="">–</option>
+            {% for p in range(500, 100500, 500) %}
+            <option value="{{ p }}">{{ "{:,}".format(p).replace(",", ".") }}</option>
+            {% endfor %}
+          </select>
+          <span>–</span>
+          <select id="price_to">
+            <option value="">–</option>
+            {% for p in range(500, 100500, 500) %}
+            <option value="{{ p }}">{{ "{:,}".format(p).replace(",", ".") }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="full">
+        <label>Ország</label>
+        <select id="country">
+          {% for c in countries %}
+          <option>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+      <button class="btn-search" id="btn-search" onclick="startSearch()">
+        🔍 Keresés indítása
+      </button>
+      <button class="btn-download" id="btn-download" onclick="downloadExcel()">
+        📥 Excel letöltése
+      </button>
+    </div>
+  </div>
+
+  <!-- Folyamat -->
+  <div class="card" id="progress-section">
+    <h2>⏳ Scraping folyamat</h2>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div id="status-text" style="font-size:13px; color:#555;">Indítás...</div>
+    <div id="log-box"></div>
+  </div>
+
+  <!-- Eredmények -->
+  <div class="card" id="results-section">
+    <div class="results-header">
+      <h2 id="results-title">📋 Eredmények</h2>
+      <button class="btn-download visible" onclick="downloadExcel()">📥 Excel letöltése</button>
+    </div>
+    <div id="table-wrap"></div>
+  </div>
+
+</div>
+
+<script>
+let currentJobId = null;
+let pollInterval = null;
+
+async function loadModels() {
+  const brand = document.getElementById("brand").value;
+  const res = await fetch(`/models/${encodeURIComponent(brand)}`);
+  const models = await res.json();
+  const sel = document.getElementById("model");
+  sel.innerHTML = models.map(m => `<option>${m}</option>`).join("");
+}
+
+async function startSearch() {
+  const btn = document.getElementById("btn-search");
+  btn.disabled = true;
+  document.getElementById("btn-download").classList.remove("visible");
+  document.getElementById("results-section").style.display = "none";
+  document.getElementById("progress-section").style.display = "block";
+  document.getElementById("log-box").innerHTML = "";
+  document.getElementById("progress-bar").style.width = "0%";
+  document.getElementById("status-text").textContent = "Indítás...";
+
+  const payload = {
+    brand:      document.getElementById("brand").value,
+    model:      document.getElementById("model").value,
+    year_from:  document.getElementById("year_from").value,
+    year_to:    document.getElementById("year_to").value,
+    price_from: document.getElementById("price_from").value,
+    price_to:   document.getElementById("price_to").value,
+    country:    document.getElementById("country").value,
+  };
+
+  const res = await fetch("/search", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  currentJobId = data.job_id;
+
+  pollInterval = setInterval(pollStatus, 1500);
+}
+
+async function pollStatus() {
+  if (!currentJobId) return;
+  const res = await fetch(`/status/${currentJobId}`);
+  const job = await res.json();
+
+  // Log frissítés
+  const logBox = document.getElementById("log-box");
+  logBox.innerHTML = (job.log || []).map(l => `<div>${l}</div>`).join("");
+  logBox.scrollTop = logBox.scrollHeight;
+
+  // Progress bar
+  document.getElementById("progress-bar").style.width = (job.progress || 0) + "%";
+  document.getElementById("status-text").textContent =
+    job.status === "done" ? `✅ Kész! ${job.cars?.length || 0} hirdetés találva.` :
+    job.status === "error" ? "❌ Hiba történt." :
+    `Gyűjtés folyamatban... (${job.progress || 0}%)`;
+
+  if (job.status === "done") {
+    clearInterval(pollInterval);
+    document.getElementById("btn-search").disabled = false;
+    document.getElementById("btn-download").classList.add("visible");
+    showResults(job.cars, job.brand, job.model);
+  } else if (job.status === "error") {
+    clearInterval(pollInterval);
+    document.getElementById("btn-search").disabled = false;
+  }
+}
+
+function showResults(cars, brand, model) {
+  document.getElementById("results-section").style.display = "block";
+  document.getElementById("results-title").textContent =
+    `📋 ${brand} ${model} – ${cars.length} hirdetés`;
+
+  const rows = cars.map((c, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${c["Cím"] || ""}</td>
+      <td><strong>${c["Ár"] || ""}</strong></td>
+      <td><span class="badge">${c["Részletek"] || ""}</span></td>
+      <td>${c["Helyszín"] || ""}</td>
+      <td>${c["Link"] ? `<a href="${c["Link"]}" target="_blank">Open</a>` : ""}</td>
+    </tr>`).join("");
+
+  document.getElementById("table-wrap").innerHTML = `
+    <table>
+      <thead><tr>
+        <th>#</th><th>Cím</th><th>Ár</th><th>Részletek</th><th>Helyszín</th><th>Link</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById("results-section").scrollIntoView({behavior: "smooth"});
+}
+
+function downloadExcel() {
+  if (currentJobId) window.location = `/download/${currentJobId}`;
+}
+
+// Kezdeti modell betöltés
+loadModels();
+</script>
+</body>
+</html>
