@@ -99,12 +99,10 @@ def index():
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
-@login_required
 def get_models(brand):
     return jsonify(BRANDS.get(brand, []))
 
 @app.route("/search", methods=["POST"])
-@login_required
 def search():
     data = request.json
     job_id = str(uuid.uuid4())
@@ -115,12 +113,10 @@ def search():
     return jsonify({"job_id": job_id})
 
 @app.route("/status/<job_id>")
-@login_required
 def status(job_id):
     return jsonify(jobs.get(job_id, {}))
 
 @app.route("/download/<job_id>")
-@login_required
 def download(job_id):
     job = jobs.get(job_id)
     if not job or not job.get("cars"):
