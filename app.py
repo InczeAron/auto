@@ -1,24 +1,26 @@
 # ============================================
-# AutoScout24 Kereső – Flask Webszerver
+# AutoScout24 Car Search – Flask Web Server
 # ============================================
-# Telepítés:
+# Install:
 #   pip install flask playwright openpyxl
 #   playwright install chromium
 #
-# Futtatás:
+# Run:
 #   python app.py
-# Majd nyisd meg: http://localhost:5000
+# Then open: http://localhost:5000
 # ============================================
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
-import time, os, re, threading, uuid, json
+import time, os, re, threading, uuid, secrets
 
 app = Flask(__name__)
+app.secret_key = secrets.token_hex(32)
 
-# Scraping állapot tárolása (job_id → státusz/eredmény)
+USERS = {"testaron": "springaron1234!"}
+
 jobs = {}
 
 BRANDS = {
@@ -44,27 +46,66 @@ BRANDS = {
     "Alfa Romeo": ["147","156","159","Giulia","Stelvio","MiTo","Giulietta"],
 }
 
+# Only countries available on AutoScout24 (18 countries + All Europe)
 COUNTRIES = {
-    "Egész Európa/Europe":  "",
-    "Németország/Germany":   "D",
-    "Ausztria/Austria":      "A",
-    "Olaszország/Italy":   "I",
-    "Franciaország/France": "F",
-    "Spanyolország/Spain": "E",
-    "Belgium":       "B",
-    "Hollandia/Netherlands":     "NL",
-    "Luxemburg":     "L",
+    "All Europe / Egész Európa": "",
+    "Germany / Németország":     "D",
+    "Austria / Ausztria":        "A",
+    "Hungary / Magyarország":    "H",
+    "Italy / Olaszország":       "I",
+    "France / Franciaország":    "F",
+    "Spain / Spanyolország":     "E",
+    "Belgium":                   "B",
+    "Netherlands / Hollandia":   "NL",
+    "Poland / Lengyelország":    "PL",
+    "Czech Republic / Csehország": "CZ",
+    "Switzerland / Svájc":       "CH",
+    "Sweden / Svédország":       "S",
+    "Denmark / Dánia":           "DK",
+    "Portugal / Portugália":     "P",
+    "Romania / Románia":         "RO",
+    "Croatia / Horvátország":    "HR",
+    "Luxembourg / Luxemburg":    "L",
 }
 
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user" not in session:
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if USERS.get(username) == password:
+            session["user"] = username
+            return redirect(url_for("index"))
+        error = "Invalid username or password / Hibás felhasználónév vagy jelszó!"
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
+@login_required
 def get_models(brand):
     return jsonify(BRANDS.get(brand, []))
 
 @app.route("/search", methods=["POST"])
+@login_required
 def search():
     data = request.json
     job_id = str(uuid.uuid4())
@@ -75,20 +116,21 @@ def search():
     return jsonify({"job_id": job_id})
 
 @app.route("/status/<job_id>")
+@login_required
 def status(job_id):
-    job = jobs.get(job_id, {})
-    return jsonify(job)
+    return jsonify(jobs.get(job_id, {}))
 
 @app.route("/download/<job_id>")
+@login_required
 def download(job_id):
     job = jobs.get(job_id)
     if not job or not job.get("cars"):
-        return "Nincs adat", 404
+        return "No data / Nincs adat", 404
     filepath = os.path.join("outputs", f"{job_id}.xlsx")
     os.makedirs("outputs", exist_ok=True)
     save_to_excel(job["cars"], filepath, job["brand"], job["model"])
     return send_file(filepath, as_attachment=True,
-                     download_name=f"{job['brand']}_{job['model']}_lista.xlsx")
+                     download_name=f"{job['brand']}_{job['model']}_listing.xlsx")
 
 def log(job_id, msg):
     jobs[job_id]["log"].append(msg)
@@ -101,7 +143,7 @@ def run_scrape(job_id, data):
     year_to    = data.get("year_to") or None
     price_from = data.get("price_from") or None
     price_to   = data.get("price_to") or None
-    country    = COUNTRIES.get(data.get("country", "Egész Európa/Europe"), "")
+    country    = COUNTRIES.get(data.get("country", ""), "")
 
     jobs[job_id]["brand"] = brand
     jobs[job_id]["model"] = model
@@ -137,7 +179,7 @@ def run_scrape(job_id, data):
                     params += "&sort=price&desc=0"
 
                 url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
-                log(job_id, f"📄 Oldal betöltése/Page loading: {page_num}")
+                log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
                 if page_num == 1:
@@ -147,7 +189,7 @@ def run_scrape(job_id, data):
                             btn = page.locator(selector).first
                             if btn.is_visible(timeout=2000):
                                 btn.click()
-                                log(job_id, "✅ Cookie elfogadva/Cookie accepted")
+                                log(job_id, "✅ Cookie accepted / Cookie elfogadva")
                                 time.sleep(1)
                                 break
                         except Exception:
@@ -160,10 +202,10 @@ def run_scrape(job_id, data):
 
                 articles = page.locator("article").all()
                 if not articles:
-                    log(job_id, "⛔ Nincs több találat/No more results")
+                    log(job_id, "⛔ No more results / Nincs több találat")
                     break
 
-                log(job_id, f"  → {len(articles)} hirdetés/ad")
+                log(job_id, f"  → {len(articles)} listings / hirdetés")
 
                 for article in articles:
                     try:
@@ -233,9 +275,9 @@ def run_scrape(job_id, data):
                             pass
 
                         if title:
-                            cars.append({"Cím/Address": title, "Ár/Price": price,
-                                         "Részletek/Details": " | ".join(details),
-                                         "Helyszín/Location": location, "Link": link})
+                            cars.append({"Cím / Title": title, "Ár / Price": price,
+                                         "Részletek / Details": " | ".join(details),
+                                         "Helyszín / Location": location, "Link": link})
                     except Exception:
                         continue
 
@@ -244,23 +286,24 @@ def run_scrape(job_id, data):
             browser.close()
 
         def parse_price(car):
-            digits = re.sub(r'[^\d]', '', car["Ár/Price"])
+            digits = re.sub(r'[^\d]', '', car["Ár / Price"])
             return int(digits) if digits else 0
         cars.sort(key=parse_price)
 
         jobs[job_id]["cars"] = cars
         jobs[job_id]["status"] = "done"
-        log(job_id, f"🎉 Kész/Done! {len(cars)} hirdetés összegyűjtve/advertisement collected.")
+        log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
 
     except Exception as e:
         jobs[job_id]["status"] = "error"
-        log(job_id, f"❌ Hiba/Error: {e}")
+        log(job_id, f"❌ Error / Hiba: {e}")
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
     ws = wb.active
     ws.title = f"{brand} {model}"
-    headers = ["#", "Cím/Address", "Ár/Price", "Részletek/Details", "Helyszín/Location", "Link"]
+
+    headers = ["#", "Cím / Title", "Ár / Price", "Részletek / Details", "Helyszín / Location", "Link", "Ár értékelés / Price Rating"]
     header_fill = PatternFill("solid", start_color="1F3864")
     header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
     for col, header in enumerate(headers, 1):
@@ -269,10 +312,19 @@ def save_to_excel(cars, filepath, brand, model):
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 22
+
+    def to_num(price_str):
+        digits = re.sub(r'[^\d]', '', price_str)
+        return int(digits) if digits else 0
+
+    prices_num = [to_num(car["Ár / Price"]) for car in cars]
+    valid_prices = [p for p in prices_num if p > 0]
+    avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
+
     for i, car in enumerate(cars, 1):
         row = i + 1
         fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
-        values = [i, car["Cím/Address"], car["Ár/Price"], car["Részletek/Details"], car["Helyszín/Location"], car["Link"]]
+        values = [i, car["Cím / Title"], car["Ár / Price"], car["Részletek / Details"], car["Helyszín / Location"], car["Link"]]
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
             cell.fill = fill
@@ -283,7 +335,37 @@ def save_to_excel(cars, filepath, brand, model):
                 cell.font = Font(name="Arial", size=10, color="0563C1", underline="single")
             else:
                 cell.font = Font(name="Arial", size=10)
-    for col, width in enumerate([5, 35, 15, 45, 30, 10], 1):
+
+        price_num = prices_num[i - 1]
+        eval_cell = ws.cell(row=row, column=7)
+        eval_cell.fill = fill
+        eval_cell.alignment = Alignment(horizontal="center", vertical="center")
+        if avg_price > 0 and price_num > 0:
+            diff_pct = (avg_price - price_num) / avg_price * 100
+            if diff_pct >= 15:
+                eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
+                eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
+            else:
+                eval_cell.value = ""
+                eval_cell.font = Font(name="Arial", size=10)
+        else:
+            eval_cell.value = ""
+            eval_cell.font = Font(name="Arial", size=10)
+
+    avg_row = len(cars) + 2
+    avg_fill = PatternFill("solid", start_color="1F3864")
+    lbl = ws.cell(row=avg_row, column=2, value="Átlagár / Average Price:")
+    lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    lbl.fill = avg_fill
+    lbl.alignment = Alignment(horizontal="right", vertical="center")
+    val = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
+    val.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    val.fill = avg_fill
+    val.alignment = Alignment(horizontal="center", vertical="center")
+    for col in [1, 4, 5, 6, 7]:
+        ws.cell(row=avg_row, column=col).fill = avg_fill
+
+    for col, width in enumerate([5, 35, 15, 45, 30, 10, 20], 1):
         ws.column_dimensions[ws.cell(1, col).column_letter].width = width
     ws.freeze_panes = "A2"
     wb.save(filepath)
