@@ -45,24 +45,14 @@ BRANDS = {
 }
 
 COUNTRIES = {
-    "Egész Európa":  "",
-    "Németország":   "D",
-    "Ausztria":      "A",
-    "Magyarország":  "H",
-    "Olaszország":   "I",
-    "Franciaország": "F",
-    "Spanyolország": "E",
+    "Egész Európa/Europe":  "",
+    "Németország/Germany":   "D",
+    "Ausztria/Austria":      "A",
+    "Olaszország/Italy":   "I",
+    "Franciaország/France": "F",
+    "Spanyolország/Spain": "E",
     "Belgium":       "B",
-    "Hollandia":     "NL",
-    "Lengyelország": "PL",
-    "Csehország":    "CZ",
-    "Svájc":         "CH",
-    "Svédország":    "S",
-    "Dánia":         "DK",
-    "Portugália":    "P",
-    "Románia":       "RO",
-    "Horvátország":  "HR",
-    "Szerbia":       "SRB",
+    "Hollandia/Netherlands":     "NL",
     "Luxemburg":     "L",
 }
 
@@ -111,7 +101,7 @@ def run_scrape(job_id, data):
     year_to    = data.get("year_to") or None
     price_from = data.get("price_from") or None
     price_to   = data.get("price_to") or None
-    country    = COUNTRIES.get(data.get("country", "Egész Európa"), "")
+    country    = COUNTRIES.get(data.get("country", "Egész Európa/Europe"), "")
 
     jobs[job_id]["brand"] = brand
     jobs[job_id]["model"] = model
@@ -147,7 +137,7 @@ def run_scrape(job_id, data):
                     params += "&sort=price&desc=0"
 
                 url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
-                log(job_id, f"📄 Oldal betöltése: {page_num}")
+                log(job_id, f"📄 Oldal betöltése/Page loading: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
                 if page_num == 1:
@@ -157,7 +147,7 @@ def run_scrape(job_id, data):
                             btn = page.locator(selector).first
                             if btn.is_visible(timeout=2000):
                                 btn.click()
-                                log(job_id, "✅ Cookie elfogadva")
+                                log(job_id, "✅ Cookie elfogadva/Cookie accepted")
                                 time.sleep(1)
                                 break
                         except Exception:
@@ -170,10 +160,10 @@ def run_scrape(job_id, data):
 
                 articles = page.locator("article").all()
                 if not articles:
-                    log(job_id, "⛔ Nincs több találat")
+                    log(job_id, "⛔ Nincs több találat/No more results")
                     break
 
-                log(job_id, f"  → {len(articles)} hirdetés")
+                log(job_id, f"  → {len(articles)} hirdetés/ad")
 
                 for article in articles:
                     try:
@@ -243,9 +233,9 @@ def run_scrape(job_id, data):
                             pass
 
                         if title:
-                            cars.append({"Cím": title, "Ár": price,
-                                         "Részletek": " | ".join(details),
-                                         "Helyszín": location, "Link": link})
+                            cars.append({"Cím/Address": title, "Ár/Price": price,
+                                         "Részletek/Details": " | ".join(details),
+                                         "Helyszín/Location": location, "Link": link})
                     except Exception:
                         continue
 
@@ -254,23 +244,23 @@ def run_scrape(job_id, data):
             browser.close()
 
         def parse_price(car):
-            digits = re.sub(r'[^\d]', '', car["Ár"])
+            digits = re.sub(r'[^\d]', '', car["Ár/Price"])
             return int(digits) if digits else 0
         cars.sort(key=parse_price)
 
         jobs[job_id]["cars"] = cars
         jobs[job_id]["status"] = "done"
-        log(job_id, f"🎉 Kész! {len(cars)} hirdetés összegyűjtve.")
+        log(job_id, f"🎉 Kész/Done! {len(cars)} hirdetés összegyűjtve/advertisement collected.")
 
     except Exception as e:
         jobs[job_id]["status"] = "error"
-        log(job_id, f"❌ Hiba: {e}")
+        log(job_id, f"❌ Hiba/Error: {e}")
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
     ws = wb.active
     ws.title = f"{brand} {model}"
-    headers = ["#", "Cím", "Ár", "Részletek", "Helyszín", "Link"]
+    headers = ["#", "Cím/Address", "Ár/Price", "Részletek/Details", "Helyszín/Location", "Link"]
     header_fill = PatternFill("solid", start_color="1F3864")
     header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
     for col, header in enumerate(headers, 1):
@@ -282,7 +272,7 @@ def save_to_excel(cars, filepath, brand, model):
     for i, car in enumerate(cars, 1):
         row = i + 1
         fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
-        values = [i, car["Cím"], car["Ár"], car["Részletek"], car["Helyszín"], car["Link"]]
+        values = [i, car["Cím/Address"], car["Ár/Price"], car["Részletek/Details"], car["Helyszín/Location"], car["Link"]]
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
             cell.fill = fill
