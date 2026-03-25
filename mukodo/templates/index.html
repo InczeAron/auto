@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="hu-en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoScout24 Kereső / Car Search</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f0f2f5; min-height: 100vh; }
+  header { background: #1F3864; color: white; padding: 18px 32px; display: flex; align-items: center; gap: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  header h1 { font-size: 20px; font-weight: bold; }
+  header span { font-size: 12px; opacity: 0.75; }
+  .container { max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+  .card { background: white; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 28px 32px; margin-bottom: 24px; }
+  .card h2 { font-size: 15px; color: #1F3864; margin-bottom: 20px; border-bottom: 2px solid #e8edf5; padding-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
+  .full { grid-column: 1 / -1; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
+  label em { font-style: normal; color: #999; font-weight: normal; }
+  select, input { width: 100%; padding: 9px 12px; border: 1.5px solid #d0d7e3; border-radius: 6px; font-size: 13px; background: #fafbfd; transition: border-color 0.2s; }
+  select:focus, input:focus { outline: none; border-color: #1F3864; background: white; }
+  .range-group { display: flex; gap: 8px; align-items: center; }
+  .range-group select { flex: 1; }
+  .range-group span { color: #888; font-size: 12px; white-space: nowrap; }
+  .btn-search { background: #1F3864; color: white; border: none; padding: 11px 32px; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; }
+  .btn-search:disabled { background: #9aabcc; cursor: not-allowed; }
+  .btn-download { background: #1a7a4a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; display: none; }
+  .btn-download.visible { display: inline-flex; align-items: center; gap: 6px; }
+  #progress-section { display: none; }
+  .progress-bar-wrap { background: #e8edf5; border-radius: 8px; height: 10px; overflow: hidden; margin: 12px 0; }
+  .progress-bar { height: 10px; background: #1F3864; border-radius: 8px; width: 0%; transition: width 0.4s; }
+  #log-box { background: #0d1117; color: #58d68d; font-family: monospace; font-size: 12px; padding: 14px; border-radius: 8px; height: 160px; overflow-y: auto; margin-top: 10px; }
+  #results-section { display: none; }
+  .results-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 16px; }
+  thead tr { background: #1F3864; color: white; }
+  thead th { padding: 10px 12px; text-align: left; font-weight: 600; font-size: 12px; }
+  tbody tr:nth-child(even) { background: #f0f4fb; }
+  tbody tr:hover { background: #dce6f1; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #e8edf5; vertical-align: middle; }
+  tbody td a { color: #1a5276; text-decoration: none; font-weight: 600; }
+  .badge { background: #e8edf5; color: #555; border-radius: 4px; padding: 2px 6px; font-size: 11px; }
+  .cheaper { color: #1a7a4a; font-weight: bold; font-size: 12px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } .full { grid-column: 1; } }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+    <rect width="32" height="32" rx="8" fill="white" fill-opacity="0.15"/>
+    <path d="M6 22 L16 10 L26 22" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="16" cy="10" r="2.5" fill="white"/>
+  </svg>
+  <div style="flex:1">
+    <h1>AutoScout24 Kereső / Car Search</h1>
+    <span>Hirdetések gyűjtése és Excel exportálás / Listing collector &amp; Excel export</span>
+  </div>
+  <a href="/logout" style="color:white;font-size:12px;opacity:0.85;text-decoration:none;border:1px solid rgba(255,255,255,0.4);padding:6px 14px;border-radius:6px;">
+    🚪 Kijelentkezés / Sign Out
+  </a>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2>🔍 Keresési szűrők / Search Filters</h2>
+    <div class="grid">
+      <div>
+        <label>Márka / <em>Make</em></label>
+        <select id="brand" onchange="loadModels()">
+          {% for brand in brands %}<option>{{ brand }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Modell / <em>Model</em></label>
+        <select id="model"></select>
+      </div>
+      <div>
+        <label>Évjárat / <em>Year</em></label>
+        <div class="range-group">
+          <select id="year_from">
+            <option value="">–</option>
+            {% for y in range(2026, 1989, -1) %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+          </select>
+          <span>–</span>
+          <select id="year_to">
+            <option value="">–</option>
+            {% for y in range(2026, 1989, -1) %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label>Ár / <em>Price</em> (€)</label>
+        <div class="range-group">
+          <select id="price_from">
+            <option value="">–</option>
+            {% for p in range(500, 100500, 500) %}<option value="{{ p }}">{{ "{:,}".format(p).replace(",", ".") }}</option>{% endfor %}
+          </select>
+          <span>–</span>
+          <select id="price_to">
+            <option value="">–</option>
+            {% for p in range(500, 100500, 500) %}<option value="{{ p }}">{{ "{:,}".format(p).replace(",", ".") }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="full">
+        <label>Ország / <em>Country</em></label>
+        <select id="country">
+          {% for c in countries %}<option>{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <button class="btn-search" id="btn-search" onclick="startSearch()">🔍 Keresés / Search</button>
+      <button class="btn-download" id="btn-download" onclick="downloadExcel()">📥 Excel letöltése / Download</button>
+    </div>
+  </div>
+
+  <div class="card" id="progress-section">
+    <h2>⏳ Folyamat / Progress</h2>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+    <div id="status-text" style="font-size:12px;color:#555;">Indítás... / Starting...</div>
+    <div id="log-box"></div>
+  </div>
+
+  <div class="card" id="results-section">
+    <div class="results-header">
+      <h2 id="results-title">📋 Eredmények / Results</h2>
+      <button class="btn-download visible" onclick="downloadExcel()">📥 Excel letöltése / Download</button>
+    </div>
+    <div id="table-wrap"></div>
+  </div>
+
+</div>
+
+<script>
+let currentJobId = null, pollInterval = null;
+
+async function loadModels() {
+  const brand = document.getElementById("brand").value;
+  const res = await fetch(`/models/${encodeURIComponent(brand)}`);
+  const models = await res.json();
+  document.getElementById("model").innerHTML = models.map(m => `<option>${m}</option>`).join("");
+}
+
+async function startSearch() {
+  document.getElementById("btn-search").disabled = true;
+  document.getElementById("btn-download").classList.remove("visible");
+  document.getElementById("results-section").style.display = "none";
+  document.getElementById("progress-section").style.display = "block";
+  document.getElementById("log-box").innerHTML = "";
+  document.getElementById("progress-bar").style.width = "0%";
+  document.getElementById("status-text").textContent = "Indítás... / Starting...";
+
+  const payload = {
+    brand:      document.getElementById("brand").value,
+    model:      document.getElementById("model").value,
+    year_from:  document.getElementById("year_from").value,
+    year_to:    document.getElementById("year_to").value,
+    price_from: document.getElementById("price_from").value,
+    price_to:   document.getElementById("price_to").value,
+    country:    document.getElementById("country").value,
+  };
+
+  const res = await fetch("/search", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+  const data = await res.json();
+  currentJobId = data.job_id;
+  pollInterval = setInterval(pollStatus, 1500);
+}
+
+async function pollStatus() {
+  if (!currentJobId) return;
+  const res = await fetch(`/status/${currentJobId}`);
+  const job = await res.json();
+  const logBox = document.getElementById("log-box");
+  logBox.innerHTML = (job.log || []).map(l => `<div>${l}</div>`).join("");
+  logBox.scrollTop = logBox.scrollHeight;
+  document.getElementById("progress-bar").style.width = (job.progress || 0) + "%";
+  document.getElementById("status-text").textContent =
+    job.status === "done"  ? `✅ Kész! / Done! ${job.cars?.length || 0} hirdetés / listings` :
+    job.status === "error" ? "❌ Hiba / Error" :
+    `Gyűjtés / Collecting... (${job.progress || 0}%)`;
+  if (job.status === "done") {
+    clearInterval(pollInterval);
+    document.getElementById("btn-search").disabled = false;
+    document.getElementById("btn-download").classList.add("visible");
+    showResults(job.cars, job.brand, job.model);
+  } else if (job.status === "error") {
+    clearInterval(pollInterval);
+    document.getElementById("btn-search").disabled = false;
+  }
+}
+
+function showResults(cars, brand, model) {
+  document.getElementById("results-section").style.display = "block";
+  document.getElementById("results-title").textContent = `📋 ${brand} ${model} – ${cars.length} hirdetés / listings`;
+
+  const prices = cars.map(c => parseInt(c["Ár / Price"].replace(/\D/g,""))).filter(p => p > 0);
+  const avg = prices.length ? prices.reduce((a,b)=>a+b,0)/prices.length : 0;
+
+  const rows = cars.map((c, i) => {
+    const p = parseInt(c["Ár / Price"].replace(/\D/g,"")) || 0;
+    const diff = avg > 0 && p > 0 ? (avg - p) / avg * 100 : 0;
+    const badge = diff >= 15 ? `<span class="cheaper">✅ ${diff.toFixed(0)}% cheaper</span>` : "";
+    return `<tr>
+      <td>${i+1}</td>
+      <td>${c["Cím / Title"]||""}</td>
+      <td><strong>${c["Ár / Price"]||""}</strong></td>
+      <td><span class="badge">${c["Részletek / Details"]||""}</span></td>
+      <td>${c["Helyszín / Location"]||""}</td>
+      <td>${c["Link"]?`<a href="${c["Link"]}" target="_blank">Open</a>`:""}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join("");
+
+  const avgFmt = avg ? avg.toLocaleString("de-DE",{maximumFractionDigits:0}) + " €" : "–";
+  document.getElementById("table-wrap").innerHTML = `
+    <table>
+      <thead><tr>
+        <th>#</th>
+        <th>Cím / Title</th>
+        <th>Ár / Price</th>
+        <th>Részletek / Details</th>
+        <th>Helyszín / Location</th>
+        <th>Link</th>
+        <th>Ár / Price Rating</th>
+      </tr></thead>
+      <tbody>
+        ${rows}
+        <tr style="background:#1F3864;color:white;font-weight:bold;">
+          <td colspan="2" style="text-align:right;padding:10px 12px;">Átlagár / Avg Price:</td>
+          <td style="padding:10px 12px;">${avgFmt}</td>
+          <td colspan="4"></td>
+        </tr>
+      </tbody>
+    </table>`;
+  document.getElementById("results-section").scrollIntoView({behavior:"smooth"});
+}
+
+function downloadExcel() { if (currentJobId) window.location = `/download/${currentJobId}`; }
+loadModels();
+</script>
+</body>
+</html>
