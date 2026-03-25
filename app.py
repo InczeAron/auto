@@ -15,11 +15,42 @@ from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 import time, os, re, threading, uuid, secrets
+import psycopg2
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
 
-USERS = {"testaron": "springaron1234!"}
+# =========================
+# DATABASE
+# =========================
+conn = psycopg2.connect(os.environ["DATABASE_URL"])
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS used_ips (
+    ip TEXT PRIMARY KEY
+)
+""")
+conn.commit()
+
+# =========================
+# IP KEZELÉS
+# =========================
+def get_user_ip():
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0]
+    return request.remote_addr
+
+def has_ip(ip):
+    cur.execute("SELECT 1 FROM used_ips WHERE ip=%s", (ip,))
+    return cur.fetchone() is not None
+
+def save_ip(ip):
+    try:
+        cur.execute("INSERT INTO used_ips (ip) VALUES (%s)", (ip,))
+        conn.commit()
+    except:
+        pass
 
 jobs = {}
 
@@ -68,35 +99,20 @@ COUNTRIES = {
     "Luxembourg / Luxemburg":    "L",
 }
 
-def login_required(f):
-    from functools import wraps
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if "user" not in session:
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return decorated
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    error = None
-    if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
-        if USERS.get(username) == password:
-            session["user"] = username
-            return redirect(url_for("index"))
-        error = "Invalid username or password / Hibás felhasználónév vagy jelszó!"
-    return render_template("login.html", error=error)
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
 @app.route("/")
 def index():
-    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+    ip = get_user_ip()
+
+    if has_ip(ip):
+        return "❌ Egyszer már beléptél/You have already entered once."
+
+    save_ip(ip)
+
+    return render_template(
+        "index.html",
+        brands=BRANDS,
+        countries=list(COUNTRIES.keys())
+    )
 
 @app.route("/models/<brand>")
 def get_models(brand):
