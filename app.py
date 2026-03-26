@@ -343,8 +343,8 @@ def run_scrape(job_id, data):
         log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
 
     except Exception as e:
-        jobs[job_id]["status"] = "error"
-        log(job_id, f"❌ Error / Hiba: {e}")
+        log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
+        
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
