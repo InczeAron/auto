@@ -192,6 +192,17 @@ def run_scrape(job_id, data):
                 log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
+                page.wait_for_selector("article", timeout=15000)
+                time.sleep(2)
+
+                # 🔥 görgetés, hogy betöltse az összes hirdetést
+                page.mouse.wheel(0, 3000)
+                time.sleep(1)
+                page.mouse.wheel(0, 3000)
+                time.sleep(1)
+
+                articles = page.locator("article").all()
+
                 if page_num == 1:
                     for selector in ["button[id='didomi-notice-agree-button']",
                                      "button:has-text('Accept All')", "button:has-text('Accept all')"]:
@@ -210,7 +221,16 @@ def run_scrape(job_id, data):
                 except Exception:
                     time.sleep(3)
 
-                articles = page.locator("article").all()
+                
+
+                # 🔥 fallback (új UI miatt)
+                if not articles:
+                    articles = page.locator("[data-testid='listing']").all()
+
+                    log(job_id, f"  → {len(articles)} listings / hirdetés")
+
+                    print("HTML length:", len(page.content()))
+
                 if not articles:
                     log(job_id, "⛔ No more results / Nincs több találat")
                     break
