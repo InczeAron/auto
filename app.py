@@ -265,31 +265,39 @@ def run_scrape(job_id, data):
                             except Exception:
                                 pass
 
-                            #itt volt
-
                         link = ""
+
                         try:
-                            for anchor in article.locator("a").all():
-                                try:
-                                    href = anchor.get_attribute("href", timeout=500)
-                                    if not href:
-                                        continue
-                                    full = "https://www.autoscout24.com" + href if href.startswith("/") else href
-                                    if "/offers/" in full:
-                                        link = full.split("?")[0]
-                                        break
-                                except Exception:
-                                    continue
+                            # 🔥 KÉPRE KATTINTÁS (legstabilabb módszer)
+                            img_link = article.locator("a:has(img)").first
+
+                            if img_link.count() > 0:
+                                href = img_link.get_attribute("href")
+
+                                if href:
+                                    if href.startswith("/"):
+                                        link = "https://www.autoscout24.com" + href
+                                    else:
+                                        link = href
+
                         except Exception:
                             pass
 
-                        if not link:    #kivehető
+                        # 🔥 fallback (ha kép nem működik)
+                        if not link:
                             try:
-                                href = article.locator("a").first.get_attribute("href")
-                                if href and "/offers/" in href:
-                                    link = "https://www.autoscout24.com" + href
+                                href = article.locator("a[href*='/offers/']").first.get_attribute("href")
+                                if href:
+                                    if href.startswith("/"):
+                                        link = "https://www.autoscout24.com" + href
+                                    else:
+                                        link = href
                             except:
                                 pass
+
+                        # 🔥 tracking levágása
+                        if link:
+                            link = link.split("?")[0]
 
                         if title:
                             # Ár megjelenítése: szám → formázott string
