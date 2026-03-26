@@ -2,12 +2,11 @@
 # AutoScout24 Car Search – Flask Web Server
 # ============================================
 # Install:
-#   pip install flask playwright openpyxl
+#   pip install flask playwright openpyxl psycopg2-binary
 #   playwright install chromium
 #
 # Run:
 #   python app.py
-# Then open: http://localhost:5000
 # ============================================
 
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
@@ -25,12 +24,7 @@ app.secret_key = secrets.token_hex(32)
 # =========================
 conn = psycopg2.connect(os.environ["DATABASE_URL"])
 cur = conn.cursor()
-
-cur.execute("""
-CREATE TABLE IF NOT EXISTS used_ips (
-    ip TEXT PRIMARY KEY
-)
-""")
+cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT PRIMARY KEY)")
 conn.commit()
 
 # =========================
@@ -49,8 +43,8 @@ def save_ip(ip):
     try:
         cur.execute("INSERT INTO used_ips (ip) VALUES (%s)", (ip,))
         conn.commit()
-    except:
-        pass
+    except Exception:
+        conn.rollback()
 
 jobs = {}
 
@@ -77,42 +71,34 @@ BRANDS = {
     "Alfa Romeo": ["147","156","159","Giulia","Stelvio","MiTo","Giulietta"],
 }
 
-# Only countries available on AutoScout24 (18 countries + All Europe)
 COUNTRIES = {
-    "All Europe / Egész Európa": "",
-    "Germany / Németország":     "D",
-    "Austria / Ausztria":        "A",
-    "Hungary / Magyarország":    "H",
-    "Italy / Olaszország":       "I",
-    "France / Franciaország":    "F",
-    "Spain / Spanyolország":     "E",
-    "Belgium":                   "B",
-    "Netherlands / Hollandia":   "NL",
-    "Poland / Lengyelország":    "PL",
+    "All Europe / Egész Európa":   "",
+    "Germany / Németország":       "D",
+    "Austria / Ausztria":          "A",
+    "Hungary / Magyarország":      "H",
+    "Italy / Olaszország":         "I",
+    "France / Franciaország":      "F",
+    "Spain / Spanyolország":       "E",
+    "Belgium":                     "B",
+    "Netherlands / Hollandia":     "NL",
+    "Poland / Lengyelország":      "PL",
     "Czech Republic / Csehország": "CZ",
-    "Switzerland / Svájc":       "CH",
-    "Sweden / Svédország":       "S",
-    "Denmark / Dánia":           "DK",
-    "Portugal / Portugália":     "P",
-    "Romania / Románia":         "RO",
-    "Croatia / Horvátország":    "HR",
-    "Luxembourg / Luxemburg":    "L",
+    "Switzerland / Svájc":         "CH",
+    "Sweden / Svédország":         "S",
+    "Denmark / Dánia":             "DK",
+    "Portugal / Portugália":       "P",
+    "Romania / Románia":           "RO",
+    "Croatia / Horvátország":      "HR",
+    "Luxembourg / Luxemburg":      "L",
 }
 
 @app.route("/")
 def index():
     ip = get_user_ip()
-
     if has_ip(ip):
-        return "❌ Egyszer már beléptél/You have already entered once."
-
+        return "❌ Egyszer már beléptél / You have already entered once."
     save_ip(ip)
-
-    return render_template(
-        "index.html",
-        brands=BRANDS,
-        countries=list(COUNTRIES.keys())
-    )
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
 def get_models(brand):
@@ -150,29 +136,15 @@ def log(job_id, msg):
 def extract_price(text):
     if not text:
         return None
-
     text = text.replace("\xa0", " ")
-
-    # első számos rész kivétele
     match = re.search(r"\d[\d\s.,]*", text)
     if not match:
         return None
-
-    number = match.group(0)
-
-    # csak számok
-    number = re.sub(r"[^\d]", "", number)
-
+    number = re.sub(r"[^\d]", "", match.group(0))
     if not number:
         return None
-
     value = int(number)
-
-    # irreális ár szűrés
-    if 500 < value < 500000:
-        return value
-
-    return None
+    return value if 500 < value < 500000 else None
 
 def run_scrape(job_id, data):
     brand      = data.get("brand", "")
@@ -253,11 +225,11 @@ def run_scrape(job_id, data):
                         except Exception:
                             pass
 
-                        price_value = None
+                        price_num = None
                         price_text = ""
                         try:
                             price_text = article.locator("[class*='Price'], [class*='price']").first.inner_text(timeout=1000).strip()
-                            price_value = extract_price(price_text)
+                            price_num = extract_price(price_text)
                         except Exception:
                             pass
 
@@ -295,47 +267,30 @@ def run_scrape(job_id, data):
 
                         link = ""
                         try:
-                            anchors = article.locator("a").all()
-
-                            for anchor in anchors:
+                            for anchor in article.locator("a").all():
                                 try:
                                     href = anchor.get_attribute("href", timeout=500)
                                     if not href:
                                         continue
-
-                                    # teljes URL
-                                    if href.startswith("/"):
-                                        full = "https://www.autoscout24.com" + href
-                                    else:
-                                        full = href
-
-                                    # ✅ CSAK VALÓDI HIRDETÉS LINK
+                                    full = "https://www.autoscout24.com" + href if href.startswith("/") else href
                                     if "/offers/" in full:
-                                        link = full
+                                        link = full.split("?")[0]
                                         break
-
                                 except Exception:
                                     continue
-
                         except Exception:
                             pass
 
-                        # 🔥 CSAK VALÓDI HIRDETÉS MARAD
-                        #if link and "/offers/" not in link:
-                        #    link = ""
-
-                        # 🔥 LINK TISZTÍTÁS
-                        if link:
-                            link = link.split("?")[0]
-
                         if title:
+                            # Ár megjelenítése: szám → formázott string
+                            price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
                             cars.append({
-                                "Cím": title,
-                                "Ár": f"{price_value:,} €" if price_value else price_text,
-                                "Ár_num": price_value,
+                                "Cím":     title,
+                                "Ár":      price_display,
+                                "Ár_num":  price_num,
                                 "Részletek": " | ".join(details),
                                 "Helyszín": location,
-                                "Link": link
+                                "Link":    link
                             })
                     except Exception:
                         continue
@@ -344,11 +299,7 @@ def run_scrape(job_id, data):
 
             browser.close()
 
-        #cars = [c for c in cars if c["Ár"] is not None]
-
-        #cars.sort(key=lambda x: x["Ár"])
         cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
-
         jobs[job_id]["cars"] = cars
         jobs[job_id]["status"] = "done"
         log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
@@ -372,27 +323,14 @@ def save_to_excel(cars, filepath, brand, model):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 22
 
-    def to_num(price_str):
-        digits = re.sub(r'[^\d]', '', price_str)
-        return int(digits) if digits else 0
-
-    #prices_num = [to_num(car["Ár / Price"]) for car in cars]
-    prices_num = [car["Ár_num"] for car in cars if car["Ár_num"]]
-    valid_prices = [p for p in prices_num if p > 0]
+    # Átlagár számítás Ár_num alapján
+    valid_prices = [c["Ár_num"] for c in cars if c["Ár_num"]]
     avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
     for i, car in enumerate(cars, 1):
         row = i + 1
         fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
-        #values = [i, car["Cím / Title"], car["Ár / Price"], car["Részletek / Details"], car["Helyszín / Location"], car["Link"]]
-        values = [
-            i,
-            car["Cím"],
-            f"{car['Ár']:,} €" if car["Ár"] else "",
-            car["Részletek"],
-            car["Helyszín"],
-            car["Link"]
-            ]
+        values = [i, car["Cím"], car["Ár"], car["Részletek"], car["Helyszín"], car["Link"]]
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
             cell.fill = fill
@@ -404,12 +342,12 @@ def save_to_excel(cars, filepath, brand, model):
             else:
                 cell.font = Font(name="Arial", size=10)
 
-        #price_num = prices_num[i - 1]
-        price_num = car["Ár"]
+        # Ár értékelés – Ár_num alapján (szám!)
+        price_num = car["Ár_num"]
         eval_cell = ws.cell(row=row, column=7)
         eval_cell.fill = fill
         eval_cell.alignment = Alignment(horizontal="center", vertical="center")
-        if avg_price > 0 and price_num > 0:
+        if avg_price > 0 and price_num and price_num > 0:
             diff_pct = (avg_price - price_num) / avg_price * 100
             if diff_pct >= 15:
                 eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
@@ -427,10 +365,10 @@ def save_to_excel(cars, filepath, brand, model):
     lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     lbl.fill = avg_fill
     lbl.alignment = Alignment(horizontal="right", vertical="center")
-    val = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
-    val.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    val.fill = avg_fill
-    val.alignment = Alignment(horizontal="center", vertical="center")
+    v = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
+    v.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    v.fill = avg_fill
+    v.alignment = Alignment(horizontal="center", vertical="center")
     for col in [1, 4, 5, 6, 7]:
         ws.cell(row=avg_row, column=col).fill = avg_fill
 

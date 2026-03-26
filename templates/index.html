@@ -17,8 +17,8 @@
   .full { grid-column: 1 / -1; }
   label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
   label em { font-style: normal; color: #999; font-weight: normal; }
-  select, input { width: 100%; padding: 9px 12px; border: 1.5px solid #d0d7e3; border-radius: 6px; font-size: 13px; background: #fafbfd; transition: border-color 0.2s; }
-  select:focus, input:focus { outline: none; border-color: #1F3864; background: white; }
+  select { width: 100%; padding: 9px 12px; border: 1.5px solid #d0d7e3; border-radius: 6px; font-size: 13px; background: #fafbfd; }
+  select:focus { outline: none; border-color: #1F3864; background: white; }
   .range-group { display: flex; gap: 8px; align-items: center; }
   .range-group select { flex: 1; }
   .range-group span { color: #888; font-size: 12px; white-space: nowrap; }
@@ -56,7 +56,6 @@
     <h1>AutoScout24 Kereső / Car Search</h1>
     <span>Hirdetések gyűjtése és Excel exportálás / Listing collector &amp; Excel export</span>
   </div>
-  
 </header>
 
 <div class="container">
@@ -192,37 +191,35 @@ async function pollStatus() {
 
 function showResults(cars, brand, model) {
   document.getElementById("results-section").style.display = "block";
-  document.getElementById("results-title").textContent = `📋 ${brand} ${model} – ${cars.length} hirdetés / listings`;
+  document.getElementById("results-title").textContent =
+    `📋 ${brand} ${model} – ${cars.length} hirdetés / listings`;
 
-  const prices = cars.map(c => parseInt(c["Ár / Price"].replace(/\D/g,""))).filter(p => p > 0);
-  const avg = prices.length ? prices.reduce((a,b)=>a+b,0)/prices.length : 0;
+  // Átlagár számítás Ár_num alapján
+  const prices = cars.map(c => c["Ár_num"]).filter(p => p && p > 0);
+  const avg = prices.length ? prices.reduce((a,b) => a+b, 0) / prices.length : 0;
 
   const rows = cars.map((c, i) => {
-    const p = parseInt(c["Ár / Price"].replace(/\D/g,"")) || 0;
+    const p = c["Ár_num"] || 0;
     const diff = avg > 0 && p > 0 ? (avg - p) / avg * 100 : 0;
     const badge = diff >= 15 ? `<span class="cheaper">✅ ${diff.toFixed(0)}% cheaper</span>` : "";
     return `<tr>
       <td>${i+1}</td>
-      <td>${c["Cím / Title"]||""}</td>
-      <td><strong>${c["Ár / Price"]||""}</strong></td>
-      <td><span class="badge">${c["Részletek / Details"]||""}</span></td>
-      <td>${c["Helyszín / Location"]||""}</td>
-      <td>${c["Link"]?`<a href="${c["Link"]}" target="_blank">Open</a>`:""}</td>
+      <td>${c["Cím"] || ""}</td>
+      <td><strong>${c["Ár"] || ""}</strong></td>
+      <td><span class="badge">${c["Részletek"] || ""}</span></td>
+      <td>${c["Helyszín"] || ""}</td>
+      <td>${c["Link"] ? `<a href="${c["Link"]}" target="_blank">Open</a>` : ""}</td>
       <td>${badge}</td>
     </tr>`;
   }).join("");
 
-  const avgFmt = avg ? avg.toLocaleString("de-DE",{maximumFractionDigits:0}) + " €" : "–";
+  const avgFmt = avg ? avg.toLocaleString("de-DE", {maximumFractionDigits:0}) + " €" : "–";
   document.getElementById("table-wrap").innerHTML = `
     <table>
       <thead><tr>
-        <th>#</th>
-        <th>Cím / Title</th>
-        <th>Ár / Price</th>
-        <th>Részletek / Details</th>
-        <th>Helyszín / Location</th>
-        <th>Link</th>
-        <th>Ár / Price Rating</th>
+        <th>#</th><th>Cím / Title</th><th>Ár / Price</th>
+        <th>Részletek / Details</th><th>Helyszín / Location</th>
+        <th>Link</th><th>Ár / Price Rating</th>
       </tr></thead>
       <tbody>
         ${rows}
