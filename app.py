@@ -295,31 +295,44 @@ def run_scrape(job_id, data):
 
                         link = ""
                         try:
-                            for anchor in article.locator("a").all():
+                            anchors = article.locator("a").all()
+
+                            for anchor in anchors:
                                 try:
                                     href = anchor.get_attribute("href", timeout=500)
                                     if not href:
                                         continue
-                                    full = "https://www.autoscout24.com" + href if href.startswith("/") else href
-                                    skip = ["/search", "/lst/", "/account", "/login", "/help", "/static", "javascript", "#"]
-                                    if any(s in full for s in skip):
-                                        continue
-                                    if "autoscout24.com" in full and len(href) > 5:
+
+                                    # teljes URL
+                                    if href.startswith("/"):
+                                        full = "https://www.autoscout24.com" + href
+                                    else:
+                                        full = href
+
+                                    # ✅ CSAK VALÓDI HIRDETÉS LINK
+                                    if "/offers/" in full:
                                         link = full
                                         break
+
                                 except Exception:
                                     continue
+
                         except Exception:
                             pass
 
-                        if link and "united-drive" in link:
-                            continue
+                        # 🔥 CSAK VALÓDI HIRDETÉS MARAD
+                        if link and "/offers/" not in link:
+                            link = ""
 
-                        if title and price_value:
+                        # 🔥 LINK TISZTÍTÁS
+                        if link:
+                            link = link.split("?")[0]
+
+                        if title:
                             cars.append({
                                 "Cím": title,
-                                "Ár": price_value,          # ← EZ MOST SZÁM!
-                                "Ár_szöveg": price_text,    # ← opcionális (debughoz)
+                                "Ár": f"{price_value:,} €" if price_value else price_text,
+                                "Ár_num": price_value,
                                 "Részletek": " | ".join(details),
                                 "Helyszín": location,
                                 "Link": link
@@ -331,9 +344,10 @@ def run_scrape(job_id, data):
 
             browser.close()
 
-        cars = [c for c in cars if c["Ár"] is not None]
+        #cars = [c for c in cars if c["Ár"] is not None]
 
-        cars.sort(key=lambda x: x["Ár"])
+        #cars.sort(key=lambda x: x["Ár"])
+        cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
 
         jobs[job_id]["cars"] = cars
         jobs[job_id]["status"] = "done"
@@ -363,7 +377,7 @@ def save_to_excel(cars, filepath, brand, model):
         return int(digits) if digits else 0
 
     #prices_num = [to_num(car["Ár / Price"]) for car in cars]
-    prices_num = [car["Ár"] for car in cars if car["Ár"]]
+    prices_num = [car["Ár_num"] for car in cars if car["Ár_num"]]
     valid_prices = [p for p in prices_num if p > 0]
     avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
