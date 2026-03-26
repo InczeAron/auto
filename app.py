@@ -147,6 +147,33 @@ def log(job_id, msg):
     jobs[job_id]["log"].append(msg)
     print(msg)
 
+def extract_price(text):
+    if not text:
+        return None
+
+    text = text.replace("\xa0", " ")
+
+    # első számos rész kivétele
+    match = re.search(r"\d[\d\s.,]*", text)
+    if not match:
+        return None
+
+    number = match.group(0)
+
+    # csak számok
+    number = re.sub(r"[^\d]", "", number)
+
+    if not number:
+        return None
+
+    value = int(number)
+
+    # irreális ár szűrés
+    if 500 < value < 500000:
+        return value
+
+    return None
+
 def run_scrape(job_id, data):
     brand      = data.get("brand", "")
     model      = data.get("model", "")
@@ -226,11 +253,11 @@ def run_scrape(job_id, data):
                         except Exception:
                             pass
 
-                        price = ""
+                        price_value = None
+                        price_text = ""
                         try:
-                            price = article.locator("[class*='Price'], [class*='price']").first.inner_text(timeout=1000).strip()[:8]
-                            if price.endswith("11"):
-                                price = price[:-1]
+                            price_text = article.locator("[class*='Price'], [class*='price']").first.inner_text(timeout=1000).strip()
+                            price_value = extract_price(price_text)
                         except Exception:
                             pass
 
@@ -285,10 +312,18 @@ def run_scrape(job_id, data):
                         except Exception:
                             pass
 
-                        if title:
-                            cars.append({"Cím / Title": title, "Ár / Price": price,
-                                         "Részletek / Details": " | ".join(details),
-                                         "Helyszín / Location": location, "Link": link})
+                        if link and "united-drive" in link:
+                            continue
+
+                        if title and price_value:
+                            cars.append({
+                                "Cím": title,
+                                "Ár": price_value,          # ← EZ MOST SZÁM!
+                                "Ár_szöveg": price_text,    # ← opcionális (debughoz)
+                                "Részletek": " | ".join(details),
+                                "Helyszín": location,
+                                "Link": link
+                            })
                     except Exception:
                         continue
 
@@ -296,10 +331,9 @@ def run_scrape(job_id, data):
 
             browser.close()
 
-        def parse_price(car):
-            digits = re.sub(r'[^\d]', '', car["Ár / Price"])
-            return int(digits) if digits else 0
-        cars.sort(key=parse_price)
+        cars = [c for c in cars if c["Ár"] is not None]
+
+        cars.sort(key=lambda x: x["Ár"])
 
         jobs[job_id]["cars"] = cars
         jobs[job_id]["status"] = "done"
@@ -328,14 +362,23 @@ def save_to_excel(cars, filepath, brand, model):
         digits = re.sub(r'[^\d]', '', price_str)
         return int(digits) if digits else 0
 
-    prices_num = [to_num(car["Ár / Price"]) for car in cars]
+    #prices_num = [to_num(car["Ár / Price"]) for car in cars]
+    prices_num = [car["Ár"] for car in cars if car["Ár"]]
     valid_prices = [p for p in prices_num if p > 0]
     avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
     for i, car in enumerate(cars, 1):
         row = i + 1
         fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
-        values = [i, car["Cím / Title"], car["Ár / Price"], car["Részletek / Details"], car["Helyszín / Location"], car["Link"]]
+        #values = [i, car["Cím / Title"], car["Ár / Price"], car["Részletek / Details"], car["Helyszín / Location"], car["Link"]]
+        values = [
+            i,
+            car["Cím"],
+            f"{car['Ár']:,} €" if car["Ár"] else "",
+            car["Részletek"],
+            car["Helyszín"],
+            car["Link"]
+            ]
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
             cell.fill = fill
@@ -347,7 +390,8 @@ def save_to_excel(cars, filepath, brand, model):
             else:
                 cell.font = Font(name="Arial", size=10)
 
-        price_num = prices_num[i - 1]
+        #price_num = prices_num[i - 1]
+        price_num = car["Ár"]
         eval_cell = ws.cell(row=row, column=7)
         eval_cell.fill = fill
         eval_cell.alignment = Alignment(horizontal="center", vertical="center")
