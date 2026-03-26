@@ -265,7 +265,29 @@ def run_scrape(job_id, data):
                             except Exception:
                                 pass
 
-                        link = ""
+                            link = ""
+
+                            try:
+                                # 🔥 direkt offers link keresése (legstabilabb)
+                                offer_link = article.locator("a[href*='/offers/']").first
+
+                                if offer_link.count() > 0:
+                                    href = offer_link.get_attribute("href")
+
+                                    if href:
+                                        if href.startswith("/"):
+                                            link = "https://www.autoscout24.com" + href
+                                        else:
+                                            link = href
+
+                            except Exception:
+                                pass
+
+                            # 🔥 tracking levágása
+                            if link:
+                                link = link.split("?")[0]
+
+                        """link = ""
                         try:
                             for anchor in article.locator("a").all():
                                 try:
@@ -279,7 +301,7 @@ def run_scrape(job_id, data):
                                 except Exception:
                                     continue
                         except Exception:
-                            pass
+                            pass"""
 
                         if title:
                             # Ár megjelenítése: szám → formázott string
