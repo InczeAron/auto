@@ -321,8 +321,8 @@ def run_scrape(job_id, data):
                             pass
 
                         # 🔥 CSAK VALÓDI HIRDETÉS MARAD
-                        if link and "/offers/" not in link:
-                            link = ""
+                        #if link and "/offers/" not in link:
+                        #    link = ""
 
                         # 🔥 LINK TISZTÍTÁS
                         if link:
