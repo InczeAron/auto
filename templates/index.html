@@ -240,32 +240,41 @@ function showResults(cars, brand, model) {
 function downloadExcel() { if (currentJobId) window.location = `/download/${currentJobId}`; }
 loadModels();
 
-yearFrom.addEventListener("change", () => {
+<script>
+const yearFrom = document.getElementById("year_from");
+const yearTo   = document.getElementById("year_to");
+
+function validateYear() {
     const fromVal = parseInt(yearFrom.value);
+    const toVal   = parseInt(yearTo.value);
 
-    [...yearTo.options].forEach(opt => {
-        if (!opt.value) return;
-        opt.disabled = parseInt(opt.value) < fromVal;
-    });
-
-    // ha rossz érték volt kiválasztva → reset
-    if (yearTo.value && parseInt(yearTo.value) < fromVal) {
+    if (fromVal && toVal && toVal < fromVal) {
         yearTo.value = "";
+        alert("Az 'ig' év nem lehet kisebb mint a 'tól'!\n'To' year cannot be smaller than 'From'!");
     }
-});
+}
 
-priceFrom.addEventListener("change", () => {
+yearFrom.addEventListener("change", validateYear);
+yearTo.addEventListener("change", validateYear);
+</script>
+
+<script>
+const priceFrom = document.getElementById("price_from");
+const priceTo   = document.getElementById("price_to");
+
+function validatePrice() {
     const fromVal = parseInt(priceFrom.value);
+    const toVal   = parseInt(priceTo.value);
 
-    [...priceTo.options].forEach(opt => {
-        if (!opt.value) return;
-        opt.disabled = parseInt(opt.value) < fromVal;
-    });
-
-    if (priceTo.value && parseInt(priceTo.value) < fromVal) {
+    if (fromVal && toVal && toVal < fromVal) {
         priceTo.value = "";
+        alert("Az 'ig' ár nem lehet kisebb mint a 'tól'!\n'To' price cannot be smaller than 'From'!");
     }
-});
+}
+
+priceFrom.addEventListener("change", validatePrice);
+priceTo.addEventListener("change", validatePrice);
+</script>
 
 </script>
 </body>

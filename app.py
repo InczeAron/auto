@@ -169,6 +169,21 @@ def run_scrape(job_id, data):
     price_to   = data.get("price_to") or None
     country    = COUNTRIES.get(data.get("country", ""), "")
 
+        # ✅ VALIDÁCIÓ (PRO védelem)
+    if year_from and year_to:
+        try:
+            if int(year_to) < int(year_from):
+                year_to = None
+        except:
+            year_to = None
+
+    if price_from and price_to:
+        try:
+            if int(price_to) < int(price_from):
+                price_to = None
+        except:
+            price_to = None
+
     jobs[job_id]["brand"] = brand
     jobs[job_id]["model"] = model
 
