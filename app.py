@@ -136,15 +136,29 @@ def log(job_id, msg):
 def extract_price(text):
     if not text:
         return None
+
     text = text.replace("\xa0", " ")
-    match = re.search(r"\d[\d\s.,]*", text)
+
+    # 🔥 CSAK AZ ÁR RÉSZ (€, CHF stb előtt)
+    match = re.search(r"([\d\s.,]+)\s*[€CHF]", text)
     if not match:
         return None
-    number = re.sub(r"[^\d]", "", match.group(0))
-    if not number:
+
+    number = match.group(1)
+
+    # 🔥 szóközök, vesszők, pontok törlése
+    number = number.replace(" ", "").replace(",", "").replace(".", "")
+
+    if not number.isdigit():
         return None
+
     value = int(number)
-    return value if 500 < value < 500000 else None
+
+    # 🔥 reális tartomány
+    if 500 < value < 500000:
+        return value
+
+    return None
 
 def run_scrape(job_id, data):
     brand      = data.get("brand", "")
