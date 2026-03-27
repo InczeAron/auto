@@ -241,39 +241,41 @@ function downloadExcel() { if (currentJobId) window.location = `/download/${curr
 loadModels();
 
 <script>
-const yearFrom = document.getElementById("year_from");
-const yearTo   = document.getElementById("year_to");
+function validateRange(fromEl, toEl, msgHu, msgEn) {
+    const fromVal = parseInt(fromEl.value);
+    const toVal   = parseInt(toEl.value);
 
-function validateYear() {
-    const fromVal = parseInt(yearFrom.value);
-    const toVal   = parseInt(yearTo.value);
-
-    if (fromVal && toVal && toVal < fromVal) {
-        yearTo.value = "";
-        alert("Az 'ig' év nem lehet kisebb mint a 'tól'!\n'To' year cannot be smaller than 'From'!");
+    if (!isNaN(fromVal) && !isNaN(toVal) && toVal < fromVal) {
+        toEl.value = "";
+        alert(msgHu + "\n" + msgEn);
     }
 }
 
-yearFrom.addEventListener("change", validateYear);
-yearTo.addEventListener("change", validateYear);
-</script>
+// Év
+year_from.addEventListener("change", () =>
+    validateRange(year_from, year_to,
+        "Az 'ig' év nem lehet kisebb mint a 'tól'!",
+        "The 'to' year cannot be smaller than 'from'!")
+);
 
-<script>
-const priceFrom = document.getElementById("price_from");
-const priceTo   = document.getElementById("price_to");
+year_to.addEventListener("change", () =>
+    validateRange(year_from, year_to,
+        "Az 'ig' év nem lehet kisebb mint a 'tól'!",
+        "The 'to' year cannot be smaller than 'from'!")
+);
 
-function validatePrice() {
-    const fromVal = parseInt(priceFrom.value);
-    const toVal   = parseInt(priceTo.value);
+// Ár
+price_from.addEventListener("change", () =>
+    validateRange(price_from, price_to,
+        "Az 'ig' ár nem lehet kisebb mint a 'tól'!",
+        "The 'to' price cannot be smaller than 'from'!")
+);
 
-    if (fromVal && toVal && toVal < fromVal) {
-        priceTo.value = "";
-        alert("Az 'ig' ár nem lehet kisebb mint a 'tól'!\n'To' price cannot be smaller than 'From'!");
-    }
-}
-
-priceFrom.addEventListener("change", validatePrice);
-priceTo.addEventListener("change", validatePrice);
+price_to.addEventListener("change", () =>
+    validateRange(price_from, price_to,
+        "Az 'ig' ár nem lehet kisebb mint a 'tól'!",
+        "The 'to' price cannot be smaller than 'from'!")
+);
 </script>
 
 </script>
