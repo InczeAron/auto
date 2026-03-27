@@ -108,6 +108,10 @@
         </select>
       </div>
     </div>
+	<p style="color:#b00; font-weight:bold; margin-bottom:10px;">
+	⚠️ A lekérdezés csak az első 200 találatra korlátozódik.<br>
+	⚠️ The query is limited to the first 200 results.
+	</p>
     <div style="margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <button class="btn-search" id="btn-search" onclick="startSearch()">🔍 Keresés / Search</button>
       <button class="btn-download" id="btn-download" onclick="downloadExcel()">📥 Excel letöltése / Download</button>
@@ -235,6 +239,34 @@ function showResults(cars, brand, model) {
 
 function downloadExcel() { if (currentJobId) window.location = `/download/${currentJobId}`; }
 loadModels();
+
+yearFrom.addEventListener("change", () => {
+    const fromVal = parseInt(yearFrom.value);
+
+    [...yearTo.options].forEach(opt => {
+        if (!opt.value) return;
+        opt.disabled = parseInt(opt.value) < fromVal;
+    });
+
+    // ha rossz érték volt kiválasztva → reset
+    if (yearTo.value && parseInt(yearTo.value) < fromVal) {
+        yearTo.value = "";
+    }
+});
+
+priceFrom.addEventListener("change", () => {
+    const fromVal = parseInt(priceFrom.value);
+
+    [...priceTo.options].forEach(opt => {
+        if (!opt.value) return;
+        opt.disabled = parseInt(opt.value) < fromVal;
+    });
+
+    if (priceTo.value && parseInt(priceTo.value) < fromVal) {
+        priceTo.value = "";
+    }
+});
+
 </script>
 </body>
 </html>
