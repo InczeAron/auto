@@ -137,16 +137,17 @@ def extract_price(text):
     if not text:
         return None
 
-    text = text.replace("\xa0", " ")
+    text = text.replace("\xa0", " ").strip()
 
-    # 🔥 CSAK AZ € ELŐTTI RÉSZ
-    match = re.search(r"([\d\s.,]+)(?=\s*[€CHF])", text)
+    # 🔥 CSAK AZ ELSŐ VALID ÁR FORMÁTUM
+    match = re.search(r"\d{1,3}(?:[.,\s]\d{3})+", text)
+
     if not match:
         return None
 
-    number = match.group(1)
+    number = match.group(0)
 
-    # 🔥 minden nem szám törlése (ez már biztonságos itt)
+    # minden nem szám törlése
     number = re.sub(r"[^\d]", "", number)
 
     if not number:
