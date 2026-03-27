@@ -168,21 +168,6 @@ def run_scrape(job_id, data):
     price_to   = data.get("price_to") or None
     country    = COUNTRIES.get(data.get("country", ""), "")
 
-    # ✅ BIZTOS VALIDÁCIÓ (nem borít semmit)
-    try:
-        if year_from not in [None, ""] and year_to not in [None, ""]:
-            if int(year_to) < int(year_from):
-                year_to = None
-    except:
-        year_to = None
-
-    try:
-        if price_from not in [None, ""] and price_to not in [None, ""]:
-            if int(price_to) < int(price_from):
-                price_to = None
-    except:
-        price_to = None
-
     jobs[job_id]["brand"] = brand
     jobs[job_id]["model"] = model
 
