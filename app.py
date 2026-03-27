@@ -192,8 +192,10 @@ def run_scrape(job_id, data):
                 log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
-                page.wait_for_selector("article", timeout=15000)
-                time.sleep(2)
+                try:
+                    page.wait_for_selector("article", timeout=8000)
+                except:
+                    page.wait_for_selector("[data-testid='listing']", timeout=8000)
 
                 # 🔥 görgetés, hogy betöltse az összes hirdetést
                 page.mouse.wheel(0, 3000)
@@ -202,6 +204,11 @@ def run_scrape(job_id, data):
                 time.sleep(1)
 
                 articles = page.locator("article").all()
+
+                if not articles:
+                    articles = page.locator("[data-testid='listing']").all()
+
+                log(job_id, f"Találatok: {len(articles)}")
 
                 if page_num == 1:
                     for selector in ["button[id='didomi-notice-agree-button']",
