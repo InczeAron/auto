@@ -269,20 +269,10 @@ def run_scrape(job_id, data):
                         price_text = ""
 
                         try:
-                            price_el = article.locator("[class*='Price'], [class*='price']").first
+                            price_text = article.locator("[class*='Price'], [class*='price']").first.inner_text(timeout=1000).strip()
 
-                            # 🔥 CSAK TEXT NODE (kiszedi a <sup>1</sup>-et)
-                            price_text = price_el.evaluate("""
-                                el => {
-                                    let text = '';
-                                    for (let node of el.childNodes) {
-                                        if (node.nodeType === Node.TEXT_NODE) {
-                                            text += node.textContent;
-                                        }
-                                    }
-                                    return text.trim();
-                                }
-                            """)
+                            # 🔥 LEVÁGJUK A VÉGÉRŐL A NEM SZÁM KARAKTEREKET (pl. ¹)
+                            price_text = re.sub(r"[^\d€.,\s]", "", price_text)
 
                             price_num = extract_price(price_text)
 
