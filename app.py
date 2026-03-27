@@ -139,22 +139,21 @@ def extract_price(text):
 
     text = text.replace("\xa0", " ")
 
-    # 🔥 CSAK AZ ÁR RÉSZ (€, CHF stb előtt)
-    match = re.search(r"([\d\s.,]+)\s*[€CHF]", text)
+    # 🔥 CSAK AZ € ELŐTTI RÉSZ
+    match = re.search(r"([\d\s.,]+)(?=\s*[€CHF])", text)
     if not match:
         return None
 
     number = match.group(1)
 
-    # 🔥 szóközök, vesszők, pontok törlése
-    number = number.replace(" ", "").replace(",", "").replace(".", "")
+    # 🔥 minden nem szám törlése (ez már biztonságos itt)
+    number = re.sub(r"[^\d]", "", number)
 
-    if not number.isdigit():
+    if not number:
         return None
 
     value = int(number)
 
-    # 🔥 reális tartomány
     if 500 < value < 500000:
         return value
 
