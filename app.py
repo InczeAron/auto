@@ -17,7 +17,7 @@ import time, os, re, threading, uuid, secrets
 import psycopg2
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
+app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
 
 # =========================
 # DATABASE
@@ -114,11 +114,17 @@ def projects():
 
 @app.before_request
 def session_timeout():
+    # Statikus és login route-ok kihagyása
+    if request.endpoint in ("static",):
+        return
     if "last_activity" in session:
         now = time.time()
         if now - session["last_activity"] > 1800:
             session.clear()
-            return redirect("/")
+            # JSON kérés esetén 401, egyébként üzenet
+            if request.is_json or request.path.startswith(("/search", "/status", "/download", "/models")):
+                return jsonify({"error": "session_expired"}), 401
+            return "❌ Session expired / Munkamenet lejárt. <a href='/'>Refresh</a>", 401
     session["last_activity"] = time.time()
 
 # ip figyelés csak 1x lehessen belépni ip alapján
@@ -126,7 +132,15 @@ def session_timeout():
 def index():
     ip = get_user_ip()
     if has_ip(ip):
-        return "❌ Egyszer már beléptél / You have already entered once."
+        # Ha már volt bent de a session lejárt, töröljük az IP-t és engedjük újra
+        if "last_activity" not in session:
+            try:
+                cur.execute("DELETE FROM used_ips WHERE ip=%s", (ip,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        else:
+            return "❌ Egyszer már beléptél / You have already entered once."
     save_ip(ip)
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 

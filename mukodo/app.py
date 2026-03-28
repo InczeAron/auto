@@ -2,12 +2,11 @@
 # AutoScout24 Car Search – Flask Web Server
 # ============================================
 # Install:
-#   pip install flask playwright openpyxl
+#   pip install flask playwright openpyxl psycopg2-binary
 #   playwright install chromium
 #
 # Run:
 #   python app.py
-# Then open: http://localhost:5000
 # ============================================
 
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
@@ -15,11 +14,37 @@ from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 import time, os, re, threading, uuid, secrets
+import psycopg2
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
 
-USERS = {"testaron": "springaron1234!"}
+# =========================
+# DATABASE
+# =========================
+conn = psycopg2.connect(os.environ["DATABASE_URL"])
+cur = conn.cursor()
+cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT PRIMARY KEY)")
+conn.commit()
+
+# =========================
+# IP KEZELÉS
+# =========================
+def get_user_ip():
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0]
+    return request.remote_addr
+
+def has_ip(ip):
+    cur.execute("SELECT 1 FROM used_ips WHERE ip=%s", (ip,))
+    return cur.fetchone() is not None
+
+def save_ip(ip):
+    try:
+        cur.execute("INSERT INTO used_ips (ip) VALUES (%s)", (ip,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
 jobs = {}
 
@@ -46,56 +71,34 @@ BRANDS = {
     "Alfa Romeo": ["147","156","159","Giulia","Stelvio","MiTo","Giulietta"],
 }
 
-# Only countries available on AutoScout24 (18 countries + All Europe)
 COUNTRIES = {
-    "All Europe / Egész Európa": "",
-    "Germany / Németország":     "D",
-    "Austria / Ausztria":        "A",
-    "Hungary / Magyarország":    "H",
-    "Italy / Olaszország":       "I",
-    "France / Franciaország":    "F",
-    "Spain / Spanyolország":     "E",
-    "Belgium":                   "B",
-    "Netherlands / Hollandia":   "NL",
-    "Poland / Lengyelország":    "PL",
+    "All Europe / Egész Európa":   "",
+    "Germany / Németország":       "D",
+    "Austria / Ausztria":          "A",
+    "Hungary / Magyarország":      "H",
+    "Italy / Olaszország":         "I",
+    "France / Franciaország":      "F",
+    "Spain / Spanyolország":       "E",
+    "Belgium":                     "B",
+    "Netherlands / Hollandia":     "NL",
+    "Poland / Lengyelország":      "PL",
     "Czech Republic / Csehország": "CZ",
-    "Switzerland / Svájc":       "CH",
-    "Sweden / Svédország":       "S",
-    "Denmark / Dánia":           "DK",
-    "Portugal / Portugália":     "P",
-    "Romania / Románia":         "RO",
-    "Croatia / Horvátország":    "HR",
-    "Luxembourg / Luxemburg":    "L",
+    "Switzerland / Svájc":         "CH",
+    "Sweden / Svédország":         "S",
+    "Denmark / Dánia":             "DK",
+    "Portugal / Portugália":       "P",
+    "Romania / Románia":           "RO",
+    "Croatia / Horvátország":      "HR",
+    "Luxembourg / Luxemburg":      "L",
 }
 
-def login_required(f):
-    from functools import wraps
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if "user" not in session:
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return decorated
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    error = None
-    if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
-        if USERS.get(username) == password:
-            session["user"] = username
-            return redirect(url_for("index"))
-        error = "Invalid username or password / Hibás felhasználónév vagy jelszó!"
-    return render_template("login.html", error=error)
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
+# ip figyelés csak 1x lehessen belépni ip alapján
 @app.route("/")
 def index():
+    ip = get_user_ip()
+    if has_ip(ip):
+        return "❌ Egyszer már beléptél / You have already entered once."
+    save_ip(ip)
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
@@ -130,6 +133,33 @@ def download(job_id):
 def log(job_id, msg):
     jobs[job_id]["log"].append(msg)
     print(msg)
+
+def extract_price(text):
+    if not text:
+        return None
+
+    text = text.replace("\xa0", " ").strip()
+
+    # 🔥 CSAK AZ ELSŐ VALID ÁR FORMÁTUM
+    match = re.search(r"\d{1,3}(?:[.,\s]\d{3})+", text)
+
+    if not match:
+        return None
+
+    number = match.group(0)
+
+    # minden nem szám törlése
+    number = re.sub(r"[^\d]", "", number)
+
+    if not number:
+        return None
+
+    value = int(number)
+
+    if 500 < value < 500000:
+        return value
+
+    return None
 
 def run_scrape(job_id, data):
     brand      = data.get("brand", "")
@@ -177,6 +207,24 @@ def run_scrape(job_id, data):
                 log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
+                try:
+                    page.wait_for_selector("article", timeout=8000)
+                except:
+                    page.wait_for_selector("[data-testid='listing']", timeout=8000)
+
+                # 🔥 görgetés, hogy betöltse az összes hirdetést
+                page.mouse.wheel(0, 3000)
+                time.sleep(1)
+                page.mouse.wheel(0, 3000)
+                time.sleep(1)
+
+                articles = page.locator("article").all()
+
+                if not articles:
+                    articles = page.locator("[data-testid='listing']").all()
+
+                log(job_id, f"Találatok: {len(articles)}")
+
                 if page_num == 1:
                     for selector in ["button[id='didomi-notice-agree-button']",
                                      "button:has-text('Accept All')", "button:has-text('Accept all')"]:
@@ -195,7 +243,16 @@ def run_scrape(job_id, data):
                 except Exception:
                     time.sleep(3)
 
-                articles = page.locator("article").all()
+                
+
+                # 🔥 fallback (új UI miatt)
+                if not articles:
+                    articles = page.locator("[data-testid='listing']").all()
+
+                    log(job_id, f"  → {len(articles)} listings / hirdetés")
+
+                    print("HTML length:", len(page.content()))
+
                 if not articles:
                     log(job_id, "⛔ No more results / Nincs több találat")
                     break
@@ -210,11 +267,17 @@ def run_scrape(job_id, data):
                         except Exception:
                             pass
 
-                        price = ""
+                        price_num = None
+                        price_text = ""
+
                         try:
-                            price = article.locator("[class*='Price'], [class*='price']").first.inner_text(timeout=1000).strip()[:8]
-                            if price.endswith("11"):
-                                price = price[:-1]
+                            price_text = article.locator("[class*='Price'], [class*='price']").first.inner_text(timeout=1000).strip()
+
+                            # 🔥 LEVÁGJUK A VÉGÉRŐL A NEM SZÁM KARAKTEREKET (pl. ¹)
+                            price_text = re.sub(r"[^\d€.,\s]", "", price_text)
+
+                            price_num = extract_price(price_text)
+
                         except Exception:
                             pass
 
@@ -251,28 +314,50 @@ def run_scrape(job_id, data):
                                 pass
 
                         link = ""
+
                         try:
-                            for anchor in article.locator("a").all():
-                                try:
-                                    href = anchor.get_attribute("href", timeout=500)
-                                    if not href:
-                                        continue
-                                    full = "https://www.autoscout24.com" + href if href.startswith("/") else href
-                                    skip = ["/search", "/lst/", "/account", "/login", "/help", "/static", "javascript", "#"]
-                                    if any(s in full for s in skip):
-                                        continue
-                                    if "autoscout24.com" in full and len(href) > 5:
-                                        link = full
-                                        break
-                                except Exception:
-                                    continue
+                            # 🔥 KÉPRE KATTINTÁS (legstabilabb módszer)
+                            img_link = article.locator("a:has(img)").first
+
+                            if img_link.count() > 0:
+                                href = img_link.get_attribute("href")
+
+                                if href:
+                                    if href.startswith("/"):
+                                        link = "https://www.autoscout24.com" + href
+                                    else:
+                                        link = href
+
                         except Exception:
                             pass
 
+                        # 🔥 fallback (ha kép nem működik)
+                        if not link:
+                            try:
+                                href = article.locator("a[href*='/offers/']").first.get_attribute("href")
+                                if href:
+                                    if href.startswith("/"):
+                                        link = "https://www.autoscout24.com" + href
+                                    else:
+                                        link = href
+                            except:
+                                pass
+
+                        # 🔥 tracking levágása
+                        if link:
+                            link = link.split("?")[0]
+
                         if title:
-                            cars.append({"Cím / Title": title, "Ár / Price": price,
-                                         "Részletek / Details": " | ".join(details),
-                                         "Helyszín / Location": location, "Link": link})
+                            # Ár megjelenítése: szám → formázott string
+                            price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
+                            cars.append({
+                                "Cím":     title,
+                                "Ár":      price_display,
+                                "Ár_num":  price_num,
+                                "Részletek": " | ".join(details),
+                                "Helyszín": location,
+                                "Link":    link
+                            })
                     except Exception:
                         continue
 
@@ -280,18 +365,14 @@ def run_scrape(job_id, data):
 
             browser.close()
 
-        def parse_price(car):
-            digits = re.sub(r'[^\d]', '', car["Ár / Price"])
-            return int(digits) if digits else 0
-        cars.sort(key=parse_price)
-
+        cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
         jobs[job_id]["cars"] = cars
         jobs[job_id]["status"] = "done"
         log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
 
     except Exception as e:
-        jobs[job_id]["status"] = "error"
-        log(job_id, f"❌ Error / Hiba: {e}")
+        log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
+        
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
@@ -308,18 +389,14 @@ def save_to_excel(cars, filepath, brand, model):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 22
 
-    def to_num(price_str):
-        digits = re.sub(r'[^\d]', '', price_str)
-        return int(digits) if digits else 0
-
-    prices_num = [to_num(car["Ár / Price"]) for car in cars]
-    valid_prices = [p for p in prices_num if p > 0]
+    # Átlagár számítás Ár_num alapján
+    valid_prices = [c["Ár_num"] for c in cars if c["Ár_num"]]
     avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
     for i, car in enumerate(cars, 1):
         row = i + 1
         fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
-        values = [i, car["Cím / Title"], car["Ár / Price"], car["Részletek / Details"], car["Helyszín / Location"], car["Link"]]
+        values = [i, car["Cím"], car["Ár"], car["Részletek"], car["Helyszín"], car["Link"]]
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
             cell.fill = fill
@@ -331,11 +408,12 @@ def save_to_excel(cars, filepath, brand, model):
             else:
                 cell.font = Font(name="Arial", size=10)
 
-        price_num = prices_num[i - 1]
+        # Ár értékelés – Ár_num alapján (szám!)
+        price_num = car["Ár_num"]
         eval_cell = ws.cell(row=row, column=7)
         eval_cell.fill = fill
         eval_cell.alignment = Alignment(horizontal="center", vertical="center")
-        if avg_price > 0 and price_num > 0:
+        if avg_price > 0 and price_num and price_num > 0:
             diff_pct = (avg_price - price_num) / avg_price * 100
             if diff_pct >= 15:
                 eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
@@ -353,10 +431,10 @@ def save_to_excel(cars, filepath, brand, model):
     lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
     lbl.fill = avg_fill
     lbl.alignment = Alignment(horizontal="right", vertical="center")
-    val = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
-    val.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    val.fill = avg_fill
-    val.alignment = Alignment(horizontal="center", vertical="center")
+    v = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
+    v.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    v.fill = avg_fill
+    v.alignment = Alignment(horizontal="center", vertical="center")
     for col in [1, 4, 5, 6, 7]:
         ws.cell(row=avg_row, column=col).fill = avg_fill
 
