@@ -91,7 +91,37 @@ COUNTRIES = {
     "Croatia / Horvátország":      "HR",
     "Luxembourg / Luxemburg":      "L",
 }
+# 30 perc inaktivitás után kiléptetés
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
 
+    # 🔐 ide jön a saját login logikád
+    if email == "admin@gmail.com" and password == "1234":
+        session["logged_in"] = True
+        session.permanent = True
+        return jsonify({"success": True})
+
+    return jsonify({"success": False, "error": "Hibás adatok"})
+
+@app.route("/projects")
+def projects():
+    if not session.get("logged_in"):
+        return redirect("/")
+    return render_template("projects.html")
+
+@app.before_request
+def session_timeout():
+    if "last_activity" in session:
+        now = time.time()
+        if now - session["last_activity"] > 1800:
+            session.clear()
+            return redirect("/")
+    session["last_activity"] = time.time()
+
+# ip figyelés csak 1x lehessen belépni ip alapján
 @app.route("/")
 def index():
     ip = get_user_ip()
