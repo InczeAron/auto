@@ -108,9 +108,11 @@
         </select>
       </div>
     </div>
+	
 	<p style="color:#b00; font-weight:bold; margin-bottom:10px;">
 	⚠️ A lekérdezés csak az első 200 találatra korlátozódik️ / The query is limited to the first 200 results.
 	</p>
+	
     <div style="margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <button class="btn-search" id="btn-search" onclick="startSearch()">🔍 Keresés / Search</button>
       <button class="btn-download" id="btn-download" onclick="downloadExcel()">📥 Excel letöltése / Download</button>
@@ -164,6 +166,11 @@ async function startSearch() {
   };
 
   const res = await fetch("/search", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+  if (res.status === 401) {
+    alert("Session expired / Munkamenet lejárt. Kérlek lépj be újra.");
+    window.location.reload();
+    return;
+  }
   const data = await res.json();
   currentJobId = data.job_id;
   pollInterval = setInterval(pollStatus, 1500);
@@ -172,6 +179,12 @@ async function startSearch() {
 async function pollStatus() {
   if (!currentJobId) return;
   const res = await fetch(`/status/${currentJobId}`);
+  if (res.status === 401) {
+    clearInterval(pollInterval);
+    alert("Session expired / Munkamenet lejárt. Kérlek lépj be újra.");
+    window.location.reload();
+    return;
+  }
   const job = await res.json();
   const logBox = document.getElementById("log-box");
   logBox.innerHTML = (job.log || []).map(l => `<div>${l}</div>`).join("");
@@ -238,9 +251,6 @@ function showResults(cars, brand, model) {
 
 function downloadExcel() { if (currentJobId) window.location = `/download/${currentJobId}`; }
 loadModels();
-
-
-
 </script>
 </body>
 </html>
