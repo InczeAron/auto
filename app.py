@@ -414,7 +414,16 @@ def run_scrape(job_id, data):
         log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
 
     except Exception as e:
-        log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
+        log(job_id, f"⚠️ Hiba történt: {e}")
+        # Ha már vannak összegyűjtött autók, azokat mentsük el
+        if cars:
+            cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
+            jobs[job_id]["cars"] = cars
+            jobs[job_id]["status"] = "done"
+            log(job_id, f"🎉 Részleges eredmény / Partial result: {len(cars)} listings / hirdetés.")
+        else:
+            jobs[job_id]["status"] = "error"
+            log(job_id, "❌ Nincs eredmény / No results collected.")
         
 
 def save_to_excel(cars, filepath, brand, model):
