@@ -147,6 +147,28 @@ async function loadModels() {
 }
 
 async function startSearch() {
+
+	 // --- ÚJ RÉSZ: évjárat és ár csere ellenőrzés ---
+  const yFrom = document.getElementById("year_from");
+  const yTo   = document.getElementById("year_to");
+  const pFrom = document.getElementById("price_from");
+  const pTo   = document.getElementById("price_to");
+
+  if (yFrom.value && yTo.value && parseInt(yFrom.value) > parseInt(yTo.value)) {
+    const tmp = yFrom.value;
+    yFrom.value = yTo.value;
+    yTo.value = tmp;
+    alert("⚠️ Évjárat értékek felcserélve / Year values swapped: " + yFrom.value + " – " + yTo.value);
+  }
+
+  if (pFrom.value && pTo.value && parseInt(pFrom.value) > parseInt(pTo.value)) {
+    const tmp = pFrom.value;
+    pFrom.value = pTo.value;
+    pTo.value = tmp;
+    alert("⚠️ Ár értékek felcserélve / Price values swapped: " + pFrom.value + " – " + pTo.value + " €");
+  }
+  // --- ÚJ RÉSZ VÉGE ---
+  
   document.getElementById("btn-search").disabled = true;
   document.getElementById("btn-download").classList.remove("visible");
   document.getElementById("results-section").style.display = "none";
