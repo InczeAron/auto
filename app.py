@@ -95,25 +95,20 @@ COUNTRIES = {
 # 30 perc inaktivitás után kiléptetés
 @app.route("/api/login", methods=["POST", "OPTIONS"])
 def api_login():
-    # CORS – aronsoft.hu tud hívni
     if request.method == "OPTIONS":
         res = app.make_default_options_response()
         res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
         res.headers["Access-Control-Allow-Headers"] = "Content-Type"
         res.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         return res
-    
-    #check
-    print("INPUT PW:", password)
-    print("DB VALUE:", row[0])
-    print("TYPE:", type(row[0]))
 
     data = request.json or {}
-    email    = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").encode("utf-8")
+
+    email = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "").strip().encode("utf-8")
 
     if not email or not password:
-        res = jsonify({"success": False, "error": "Hiányzó adatok / Missing data"})
+        res = jsonify({"success": False, "error": "Hiányzó adatok"})
         res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
         return res, 400
 
@@ -123,34 +118,26 @@ def api_login():
     except Exception as e:
         print("DB ERROR:", e)
         conn.rollback()
-        #res = jsonify({"success": False, "error": "DB hiba / DB error"})
-        #res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
-        #return res, 500
-
-    """if row and bcrypt.checkpw(password, row[0].encode("utf-8")):
-        res = jsonify({"success": True})
-    else:
-        res = jsonify({"success": False, "error": "Hibás email vagy jelszó / Invalid credentials"})
-
-    res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
-    return res"""
+        res = jsonify({"success": False, "error": "DB hiba"})
+        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        return res, 500
 
     if row:
         stored_hash = row[0]
 
-        # 🔥 ha már bytes → ne encode-old újra
         if isinstance(stored_hash, str):
-            # ha benne van hogy b'...' → tisztítás
-            if stored_hash.startswith("b'"):
-                stored_hash = stored_hash[2:-1]
             stored_hash = stored_hash.encode("utf-8")
 
         if bcrypt.checkpw(password, stored_hash):
+            session["logged_in"] = True
             res = jsonify({"success": True})
         else:
             res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
     else:
         res = jsonify({"success": False, "error": "Nincs ilyen user"})
+
+    res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+    return res
 
 # Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
 @app.route("/api/hash", methods=["GET"])
