@@ -25,7 +25,6 @@ app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
 # =========================
 conn = psycopg2.connect(os.environ["DATABASE_URL"])
 cur = conn.cursor()
-cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT PRIMARY KEY)")
 conn.commit()
 
 # =========================
@@ -92,6 +91,7 @@ COUNTRIES = {
     "Croatia / Horvátország":      "HR",
     "Luxembourg / Luxemburg":      "L",
 }
+
 # 30 perc inaktivitás után kiléptetés
 @app.route("/api/login", methods=["POST", "OPTIONS"])
 def api_login():
@@ -102,6 +102,11 @@ def api_login():
         res.headers["Access-Control-Allow-Headers"] = "Content-Type"
         res.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         return res
+    
+    #check
+    print("INPUT PW:", password)
+    print("DB VALUE:", row[0])
+    print("TYPE:", type(row[0]))
 
     data = request.json or {}
     email    = (data.get("email") or "").strip().lower()
@@ -116,18 +121,36 @@ def api_login():
         cur.execute("SELECT jelsz FROM befele WHERE felh = %s", (email,))
         row = cur.fetchone()
     except Exception as e:
+        print("DB ERROR:", e)
         conn.rollback()
-        res = jsonify({"success": False, "error": "DB hiba / DB error"})
-        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
-        return res, 500
+        #res = jsonify({"success": False, "error": "DB hiba / DB error"})
+        #res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        #return res, 500
 
-    if row and bcrypt.checkpw(password, row[0].encode("utf-8")):
+    """if row and bcrypt.checkpw(password, row[0].encode("utf-8")):
         res = jsonify({"success": True})
     else:
         res = jsonify({"success": False, "error": "Hibás email vagy jelszó / Invalid credentials"})
 
     res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
-    return res
+    return res"""
+
+    if row:
+        stored_hash = row[0]
+
+        # 🔥 ha már bytes → ne encode-old újra
+        if isinstance(stored_hash, str):
+            # ha benne van hogy b'...' → tisztítás
+            if stored_hash.startswith("b'"):
+                stored_hash = stored_hash[2:-1]
+            stored_hash = stored_hash.encode("utf-8")
+
+        if bcrypt.checkpw(password, stored_hash):
+            res = jsonify({"success": True})
+        else:
+            res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
+    else:
+        res = jsonify({"success": False, "error": "Nincs ilyen user"})
 
 # Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
 @app.route("/api/hash", methods=["GET"])
