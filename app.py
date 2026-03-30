@@ -123,6 +123,18 @@ def api_login():
         return res, 500
 
     if row:
+            stored_hash = row[0]
+
+            if password.decode("utf-8") == stored_hash:
+                session["logged_in"] = True
+                res = jsonify({"success": True})
+            else:
+                res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
+    else:
+        res = jsonify({"success": False, "error": "Nincs ilyen user"})
+
+        #check
+    """if row:
         stored_hash = row[0]
 
         if isinstance(stored_hash, str):
@@ -137,16 +149,16 @@ def api_login():
         res = jsonify({"success": False, "error": "Nincs ilyen user"})
 
     res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
-    return res
+    return res"""
 
 # Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
-@app.route("/api/hash", methods=["GET"])
+"""@app.route("/api/hash", methods=["GET"])
 def api_hash():
     pw = request.args.get("pw", "")
     if not pw:
         return "?pw=yourpassword", 400
     hashed = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    return jsonify({"hash": hashed})
+    return jsonify({"hash": hashed})"""
 
 @app.route("/projects")
 def projects():
