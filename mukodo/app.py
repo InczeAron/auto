@@ -17,7 +17,7 @@ import time, os, re, threading, uuid, secrets
 import psycopg2
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
+app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
 
 # =========================
 # DATABASE
@@ -91,13 +91,56 @@ COUNTRIES = {
     "Croatia / Horvátország":      "HR",
     "Luxembourg / Luxemburg":      "L",
 }
+# 30 perc inaktivitás után kiléptetés
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+
+    # 🔐 ide jön a saját login logikád
+    if email == "admin@gmail.com" and password == "1234":
+        session["logged_in"] = True
+        session.permanent = True
+        return jsonify({"success": True})
+
+    return jsonify({"success": False, "error": "Hibás adatok"})
+
+@app.route("/projects")
+def projects():
+    if not session.get("logged_in"):
+        return redirect("/")
+    return render_template("projects.html")
+
+@app.before_request
+def session_timeout():
+    # Statikus és login route-ok kihagyása
+    if request.endpoint in ("static",):
+        return
+    if "last_activity" in session:
+        now = time.time()
+        if now - session["last_activity"] > 1800:
+            session.clear()
+            # JSON kérés esetén 401, egyébként üzenet
+            if request.is_json or request.path.startswith(("/search", "/status", "/download", "/models")):
+                return jsonify({"error": "session_expired"}), 401
+            return "❌ Session expired / Munkamenet lejárt. <a href='/'>Refresh</a>", 401
+    session["last_activity"] = time.time()
 
 # ip figyelés csak 1x lehessen belépni ip alapján
 @app.route("/")
 def index():
     ip = get_user_ip()
     if has_ip(ip):
-        return "❌ Egyszer már beléptél / You have already entered once."
+        # Ha már volt bent de a session lejárt, töröljük az IP-t és engedjük újra
+        if "last_activity" not in session:
+            try:
+                cur.execute("DELETE FROM used_ips WHERE ip=%s", (ip,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        else:
+            return "❌ Egyszer már beléptél / You have already entered once."
     save_ip(ip)
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
@@ -371,7 +414,16 @@ def run_scrape(job_id, data):
         log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
 
     except Exception as e:
-        log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
+        log(job_id, f"⚠️ Hiba történt: {e}")
+        # Ha már vannak összegyűjtött autók, azokat mentsük el
+        if cars:
+            cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
+            jobs[job_id]["cars"] = cars
+            jobs[job_id]["status"] = "done"
+            log(job_id, f"🎉 Részleges eredmény / Partial result: {len(cars)} listings / hirdetés.")
+        else:
+            jobs[job_id]["status"] = "error"
+            log(job_id, "❌ Nincs eredmény / No results collected.")
         
 
 def save_to_excel(cars, filepath, brand, model):

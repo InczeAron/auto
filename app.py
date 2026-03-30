@@ -15,6 +15,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 import time, os, re, threading, uuid, secrets
 import psycopg2
+import bcrypt
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
@@ -92,19 +93,50 @@ COUNTRIES = {
     "Luxembourg / Luxemburg":      "L",
 }
 # 30 perc inaktivitás után kiléptetés
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
+@app.route("/api/login", methods=["POST", "OPTIONS"])
+def api_login():
+    # CORS – aronsoft.hu tud hívni
+    if request.method == "OPTIONS":
+        res = app.make_default_options_response()
+        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        res.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        res.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        return res
 
-    # 🔐 ide jön a saját login logikád
-    if email == "admin@gmail.com" and password == "1234":
-        session["logged_in"] = True
-        session.permanent = True
-        return jsonify({"success": True})
+    data = request.json or {}
+    email    = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "").encode("utf-8")
 
-    return jsonify({"success": False, "error": "Hibás adatok"})
+    if not email or not password:
+        res = jsonify({"success": False, "error": "Hiányzó adatok / Missing data"})
+        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        return res, 400
+
+    try:
+        cur.execute("SELECT jelsz FROM befele WHERE felh = %s", (email,))
+        row = cur.fetchone()
+    except Exception as e:
+        conn.rollback()
+        res = jsonify({"success": False, "error": "DB hiba / DB error"})
+        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        return res, 500
+
+    if row and bcrypt.checkpw(password, row[0].encode("utf-8")):
+        res = jsonify({"success": True})
+    else:
+        res = jsonify({"success": False, "error": "Hibás email vagy jelszó / Invalid credentials"})
+
+    res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+    return res
+
+# Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
+@app.route("/api/hash", methods=["GET"])
+def api_hash():
+    pw = request.args.get("pw", "")
+    if not pw:
+        return "?pw=yourpassword", 400
+    hashed = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return jsonify({"hash": hashed})
 
 @app.route("/projects")
 def projects():
@@ -414,16 +446,7 @@ def run_scrape(job_id, data):
         log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
 
     except Exception as e:
-        log(job_id, f"⚠️ Hiba történt: {e}")
-        # Ha már vannak összegyűjtött autók, azokat mentsük el
-        if cars:
-            cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
-            jobs[job_id]["cars"] = cars
-            jobs[job_id]["status"] = "done"
-            log(job_id, f"🎉 Részleges eredmény / Partial result: {len(cars)} listings / hirdetés.")
-        else:
-            jobs[job_id]["status"] = "error"
-            log(job_id, "❌ Nincs eredmény / No results collected.")
+        log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
         
 
 def save_to_excel(cars, filepath, brand, model):
