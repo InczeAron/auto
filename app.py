@@ -124,6 +124,10 @@ def api_login():
 
     if row:
             stored_hash = row[0]
+            
+            print("EMAIL:", email)
+            print("PASSWORD:", password.decode("utf-8"))
+            print("DB:", stored_hash)
 
             if password.decode("utf-8") == stored_hash:
                 session["logged_in"] = True
