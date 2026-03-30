@@ -123,37 +123,35 @@ def api_login():
         return res, 500
 
     if row:
-            stored_hash = row[0]
-            
-            print("EMAIL:", email)
-            print("PASSWORD:", password.decode("utf-8"))
-            print("DB:", stored_hash)
+        stored_hash = row[0].strip()
+        pw_plain = password.decode("utf-8").strip()
 
-            if password.decode("utf-8") == stored_hash:
+        # Debug log
+        print("EMAIL:", email)
+        print("PW_PLAIN:", pw_plain)
+        print("DB_HASH:", stored_hash)
+
+        try:
+            # Bcrypt ellenőrzés
+            if bcrypt.checkpw(pw_plain.encode("utf-8"), stored_hash.encode("utf-8")):
                 session["logged_in"] = True
                 res = jsonify({"success": True})
             else:
-                res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
+                res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
+        except Exception as bcrypt_err:
+            print("BCRYPT ERROR:", bcrypt_err)
+            # Fallback: sima szöveges összehasonlítás (ha még nincs hash-elve)
+            if pw_plain == stored_hash:
+                session["logged_in"] = True
+                res = jsonify({"success": True})
+            else:
+                res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
     else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user"})
-
-        #check
-    """if row:
-        stored_hash = row[0]
-
-        if isinstance(stored_hash, str):
-            stored_hash = stored_hash.encode("utf-8")
-
-        if bcrypt.checkpw(password, stored_hash):
-            session["logged_in"] = True
-            res = jsonify({"success": True})
-        else:
-            res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
-    else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user"})
+        print("NO USER FOUND for email:", email)
+        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
 
     res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
-    return res"""
+    return res
 
 # Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
 """@app.route("/api/hash", methods=["GET"])
