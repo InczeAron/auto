@@ -23,9 +23,28 @@ app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
 # =========================
 # DATABASE
 # =========================
-conn = psycopg2.connect(os.environ["DATABASE_URL"])
-cur = conn.cursor()
-conn.commit()
+_conn = None
+
+def get_db():
+    global _conn
+    try:
+        if _conn is None or _conn.closed:
+            _conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        else:
+            # ping – ha megszakadt a kapcsolat, újracsatlakozik
+            _conn.cursor().execute("SELECT 1")
+    except Exception:
+        _conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    return _conn
+
+# Táblák létrehozása induláskor
+def init_db():
+    c = get_db()
+    cur = c.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT PRIMARY KEY)")
+    c.commit()
+
+init_db()
 
 # =========================
 # IP KEZELÉS
@@ -36,15 +55,19 @@ def get_user_ip():
     return request.remote_addr
 
 def has_ip(ip):
+    c = get_db()
+    cur = c.cursor()
     cur.execute("SELECT 1 FROM used_ips WHERE ip=%s", (ip,))
     return cur.fetchone() is not None
 
 def save_ip(ip):
     try:
+        c = get_db()
+        cur = c.cursor()
         cur.execute("INSERT INTO used_ips (ip) VALUES (%s)", (ip,))
-        conn.commit()
+        c.commit()
     except Exception:
-        conn.rollback()
+        get_db().rollback()
 
 jobs = {}
 
@@ -124,11 +147,16 @@ def api_login():
         return res, 400
 
     try:
+        c = get_db()
+        cur = c.cursor()
         cur.execute("SELECT jelsz FROM befele WHERE felh = %s", (email,))
         row = cur.fetchone()
     except Exception as e:
         print("DB ERROR:", e)
-        conn.rollback()
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
         res = jsonify({"success": False, "error": "DB hiba"})
         res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
         return res, 500
