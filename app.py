@@ -161,38 +161,29 @@ def api_login():
         res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
         return res, 500
 
+    pw_plain = password.decode("utf-8").strip()
+    print("EMAIL:", email)
+    print("ROW FOUND:", row is not None)
+
     if row:
-            stored_hash = row[0]
-            
-            print("EMAIL:", email)
-            print("PASSWORD:", password.decode("utf-8"))
-            print("DB:", stored_hash)
+        stored = row[0].strip()
+        print("STORED:", stored)
+        try:
+            match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
+        except Exception:
+            # fallback: sima szöveges összehasonlítás ha nincs bcrypt hash
+            match = (pw_plain == stored)
 
-            if password.decode("utf-8") == stored_hash:
-                session["logged_in"] = True
-                res = jsonify({"success": True})
-            else:
-                res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
-    else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user"})
-
-        #check
-    """if row:
-        stored_hash = row[0]
-
-        if isinstance(stored_hash, str):
-            stored_hash = stored_hash.encode("utf-8")
-
-        if bcrypt.checkpw(password, stored_hash):
+        if match:
             session["logged_in"] = True
             res = jsonify({"success": True})
         else:
-            res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
+            res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
     else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user"})
+        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
 
     res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-    return res"""
+    return res
 
 # Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
 """@app.route("/api/hash", methods=["GET"])
