@@ -93,11 +93,22 @@ COUNTRIES = {
 }
 
 # 30 perc inaktivitás után kiléptetés
+ALLOWED_ORIGINS = [
+    "https://aronsoft.hu",
+    "https://www.aronsoft.hu",
+    "http://aronsoft.hu",
+    "http://www.aronsoft.hu",
+]
+
+def get_cors_origin():
+    origin = request.headers.get("Origin", "")
+    return origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
+
 @app.route("/api/login", methods=["POST", "OPTIONS"])
 def api_login():
     if request.method == "OPTIONS":
         res = app.make_default_options_response()
-        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
         res.headers["Access-Control-Allow-Headers"] = "Content-Type"
         res.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         return res
@@ -109,7 +120,7 @@ def api_login():
 
     if not email or not password:
         res = jsonify({"success": False, "error": "Hiányzó adatok"})
-        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
         return res, 400
 
     try:
@@ -119,39 +130,41 @@ def api_login():
         print("DB ERROR:", e)
         conn.rollback()
         res = jsonify({"success": False, "error": "DB hiba"})
-        res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
         return res, 500
 
     if row:
-        stored_hash = row[0].strip()
-        pw_plain = password.decode("utf-8").strip()
+            stored_hash = row[0]
+            
+            print("EMAIL:", email)
+            print("PASSWORD:", password.decode("utf-8"))
+            print("DB:", stored_hash)
 
-        # Debug log
-        print("EMAIL:", email)
-        print("PW_PLAIN:", pw_plain)
-        print("DB_HASH:", stored_hash)
-
-        try:
-            # Bcrypt ellenőrzés
-            if bcrypt.checkpw(pw_plain.encode("utf-8"), stored_hash.encode("utf-8")):
+            if password.decode("utf-8") == stored_hash:
                 session["logged_in"] = True
                 res = jsonify({"success": True})
             else:
-                res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
-        except Exception as bcrypt_err:
-            print("BCRYPT ERROR:", bcrypt_err)
-            # Fallback: sima szöveges összehasonlítás (ha még nincs hash-elve)
-            if pw_plain == stored_hash:
-                session["logged_in"] = True
-                res = jsonify({"success": True})
-            else:
-                res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
+                res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
     else:
-        print("NO USER FOUND for email:", email)
-        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
+        res = jsonify({"success": False, "error": "Nincs ilyen user"})
 
-    res.headers["Access-Control-Allow-Origin"] = "https://aronsoft.hu"
-    return res
+        #check
+    """if row:
+        stored_hash = row[0]
+
+        if isinstance(stored_hash, str):
+            stored_hash = stored_hash.encode("utf-8")
+
+        if bcrypt.checkpw(password, stored_hash):
+            session["logged_in"] = True
+            res = jsonify({"success": True})
+        else:
+            res = jsonify({"success": False, "error": "Hibás email vagy jelszó"})
+    else:
+        res = jsonify({"success": False, "error": "Nincs ilyen user"})
+
+    res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
+    return res"""
 
 # Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
 """@app.route("/api/hash", methods=["GET"])
