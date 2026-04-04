@@ -494,21 +494,21 @@ def run_scrape(job_id, data):
                             full_html = article.inner_html(timeout=1000)
                             
                             # Debug: első article szövegének kiírása
-                            if len(cars) == 0:
-                                print("=== ARTICLE TEXT SAMPLE ===")
-                                print(full_text[:500])
-                                print("=== ARTICLE HTML SAMPLE ===")
-                                print(full_html[:800])
-                                print("===========================")
-
+                            #if len(cars) == 0:
+                                #print("=== ARTICLE TEXT SAMPLE ===")
+                                #print(full_text[:500])
+                                #print("=== ARTICLE HTML SAMPLE ===")
+                                #print(full_html[:800])
+                                #print("===========================")                                             
                             # Seller típus keresése szövegben és HTML-ben
                             combined = full_text + full_html
-                            if any(x in combined for x in ["Private Seller", "PrivateSeller", "private-seller",
-                                                            "Privat", "Privatanbieter", "private_seller",
-                                                            "seller-private", "adTypePrivate"]):
+                            combined_lower = combined.lower()
+                            if any(x in combined_lower for x in ["private seller", "privateseller", "private-seller",
+                                                                  "privatanbieter", "private_seller",
+                                                                  "seller-private", "adtypeprivate"]):
                                 seller_label = "private"
-                            elif any(x in combined for x in ["Dealer", "dealer", "Händler",
-                                                              "adTypeDealer", "seller-dealer"]):
+                            elif any(x in combined_lower for x in ["dealer", "händler",
+                                                                    "adtypedealer", "seller-dealer"]):
                                 seller_label = "dealer"
                         except Exception as e:
                             print(f"Seller detect error: {e}")
@@ -521,6 +521,7 @@ def run_scrape(job_id, data):
                             continue
 
                         if title:
+                            # Ár megjelenítése: szám → formázott string                                       
                             price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
                             cars.append({
                                 "Cím":     title,
@@ -544,7 +545,15 @@ def run_scrape(job_id, data):
 
     except Exception as e:
         log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
-        
+        # Ha már vannak összegyűjtött autók, azokat mentsük el
+        if cars:
+            cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
+            jobs[job_id]["cars"] = cars
+            jobs[job_id]["status"] = "done"
+            log(job_id, f"🎉 Részleges eredmény / Partial result: {len(cars)} listings / hirdetés.")
+        else:
+            jobs[job_id]["status"] = "error"
+            log(job_id, "❌ Nincs eredmény / No results collected.")                         
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
