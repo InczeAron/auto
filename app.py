@@ -74,7 +74,7 @@ jobs = {}
 BRANDS = {
     "Audi":       ["A1","A2","A3","A4","A5","A6","A7","A8","Q3","Q5","Q7","TT","R8"],
     "BMW":        ["1-es","2-es","3-as","4-es","5-ös","6-os","7-es","X1","X3","X5","Z4","M3","M5"],
-    "Mercedes":   ["A","B","C","E","S","GLA","GLC","GLE","GLK","CLA","CLS","SLK"],
+    "Mercedes-Benz":   ["A","B","C","E","S","GLA","GLC","GLE","GLK","CLA","CLS","SLK"],
     "Volkswagen": ["Golf","Polo","Passat","Tiguan","Touareg","T-Roc","ID.3","ID.4","Caddy","Sharan"],
     "Ford":       ["Focus","Fiesta","Mondeo","Kuga","Puma","Mustang","Galaxy","S-Max","Transit"],
     "Opel":       ["Astra","Corsa","Insignia","Zafira","Mokka","Crossland","Grandland"],
