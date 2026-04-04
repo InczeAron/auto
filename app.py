@@ -335,9 +335,9 @@ def run_scrape(job_id, data):
                 if km_from:     params += f"&kmfrom={km_from}"
                 if km_to:       params += f"&kmto={km_to}"
                 if seller_type == "dealer":
-                    params += "&adtype=D"
+                    params += "&atype=C&adtype=D"
                 elif seller_type == "private":
-                    params += "&adtype=P"
+                    params += "&atype=C&adtype=P"
                 if year_from or year_to:
                     params += "&sort=age&desc=1"
                 elif price_from or price_to:
@@ -487,8 +487,25 @@ def run_scrape(job_id, data):
                         if link:
                             link = link.split("?")[0]
 
+                        # Eladó típusának kiolvasása az article szövegéből
+                        seller_label = ""
+                        try:
+                            full_text = article.inner_text(timeout=1000)
+                            if "Private Seller" in full_text or "Magánszemély" in full_text or "Privat" in full_text:
+                                seller_label = "private"
+                            elif "Dealer" in full_text or "Kereskedő" in full_text or "Händler" in full_text:
+                                seller_label = "dealer"
+                        except Exception:
+                            pass
+
+                        # Szűrés eladó típusa alapján
+                        if seller_type == "private" and seller_label == "dealer":
+                            continue
+                        if seller_type == "dealer" and seller_label == "private":
+                            continue
+
                         if title:
-                            # Ár megjelenítése: szám → formázott string
+                            # Ár megjelenítése: szám → formázott string                                                  
                             price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
                             cars.append({
                                 "Cím":     title,
@@ -512,7 +529,15 @@ def run_scrape(job_id, data):
 
     except Exception as e:
         log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
-        
+        # Ha már vannak összegyűjtött autók, azokat mentsük el
+        if cars:
+            cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
+            jobs[job_id]["cars"] = cars
+            jobs[job_id]["status"] = "done"
+            log(job_id, f"🎉 Részleges eredmény / Partial result: {len(cars)} listings / hirdetés.")
+        else:
+            jobs[job_id]["status"] = "error"
+            log(job_id, "❌ Nincs eredmény / No results collected.")                        
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
