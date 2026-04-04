@@ -126,11 +126,14 @@
         <label>Eladó típusa / <em>Seller Type</em></label>
         <select id="seller_type">
           <option value="">Mindkettő / All</option>
-          <option value="D">Kereskedő / Dealer</option>
-          <option value="P">Magánszemély / Private</option>
+          <option value="dealer">Kereskedő / Dealer</option>
+          <option value="private">Magánszemély / Private</option>
         </select>
       </div>
     </div>
+	<p style="color:#b00; font-weight:bold; margin-bottom:10px;">
+	⚠️ A lekérdezés csak az első 200 találatra korlátozódik️ / The query is limited to the first 200 results.
+	</p>							  
     <div style="margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <button class="btn-search" id="btn-search" onclick="startSearch()">🔍 Keresés / Search</button>
       <button class="btn-download" id="btn-download" onclick="downloadExcel()">📥 Excel letöltése / Download</button>
@@ -165,6 +168,28 @@ async function loadModels() {
 }
 
 async function startSearch() {
+
+
+	 // --- ÚJ RÉSZ: évjárat és ár csere ellenőrzés ---
+  const yFrom = document.getElementById("year_from");
+  const yTo   = document.getElementById("year_to");
+  const pFrom = document.getElementById("price_from");
+  const pTo   = document.getElementById("price_to");
+
+  if (yFrom.value && yTo.value && parseInt(yFrom.value) > parseInt(yTo.value)) {
+    const tmp = yFrom.value;
+    yFrom.value = yTo.value;
+    yTo.value = tmp;
+    alert("⚠️ Évjárat értékek felcserélve / Year values swapped: " + yFrom.value + " – " + yTo.value);
+  }
+
+  if (pFrom.value && pTo.value && parseInt(pFrom.value) > parseInt(pTo.value)) {
+    const tmp = pFrom.value;
+    pFrom.value = pTo.value;
+    pTo.value = tmp;
+    alert("⚠️ Ár értékek felcserélve / Price values swapped: " + pFrom.value + " – " + pTo.value + " €");
+  }
+  // --- ÚJ RÉSZ VÉGE ---					
   document.getElementById("btn-search").disabled = true;
   document.getElementById("btn-download").classList.remove("visible");
   document.getElementById("results-section").style.display = "none";

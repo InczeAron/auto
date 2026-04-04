@@ -334,7 +334,10 @@ def run_scrape(job_id, data):
                 if country:    params += f"&cy={country}"
                 if km_from:     params += f"&kmfrom={km_from}"
                 if km_to:       params += f"&kmto={km_to}"
-                if seller_type: params += f"&sellertype={seller_type}"
+                if seller_type == "dealer":
+                    params += "&adtype=D"
+                elif seller_type == "private":
+                    params += "&adtype=P"
                 if year_from or year_to:
                     params += "&sort=age&desc=1"
                 elif price_from or price_to:
