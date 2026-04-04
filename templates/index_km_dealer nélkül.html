@@ -107,30 +107,12 @@
           {% for c in countries %}<option>{{ c }}</option>{% endfor %}
         </select>
       </div>
-      <div>
-        <label>Km állás / <em>Mileage</em> (km)</label>
-        <div class="range-group">
-          <select id="km_from">
-            <option value="">–</option>
-            <option value="0">0</option>
-            {% for k in range(10000, 310000, 10000) %}<option value="{{ k }}">{{ "{:,}".format(k).replace(",", ".") }}</option>{% endfor %}
-          </select>
-          <span>–</span>
-          <select id="km_to">
-            <option value="">–</option>
-            {% for k in range(10000, 310000, 10000) %}<option value="{{ k }}">{{ "{:,}".format(k).replace(",", ".") }}</option>{% endfor %}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label>Eladó típusa / <em>Seller Type</em></label>
-        <select id="seller_type">
-          <option value="">Mindkettő / All</option>
-          <option value="D">Kereskedő / Dealer</option>
-          <option value="P">Magánszemély / Private</option>
-        </select>
-      </div>
     </div>
+	
+	<p style="color:#b00; font-weight:bold; margin-bottom:10px;">
+	⚠️ A lekérdezés csak az első 200 találatra korlátozódik️ / The query is limited to the first 200 results.
+	</p>
+	
     <div style="margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <button class="btn-search" id="btn-search" onclick="startSearch()">🔍 Keresés / Search</button>
       <button class="btn-download" id="btn-download" onclick="downloadExcel()">📥 Excel letöltése / Download</button>
@@ -165,6 +147,28 @@ async function loadModels() {
 }
 
 async function startSearch() {
+
+	 // --- ÚJ RÉSZ: évjárat és ár csere ellenőrzés ---
+  const yFrom = document.getElementById("year_from");
+  const yTo   = document.getElementById("year_to");
+  const pFrom = document.getElementById("price_from");
+  const pTo   = document.getElementById("price_to");
+
+  if (yFrom.value && yTo.value && parseInt(yFrom.value) > parseInt(yTo.value)) {
+    const tmp = yFrom.value;
+    yFrom.value = yTo.value;
+    yTo.value = tmp;
+    alert("⚠️ Évjárat értékek felcserélve / Year values swapped: " + yFrom.value + " – " + yTo.value);
+  }
+
+  if (pFrom.value && pTo.value && parseInt(pFrom.value) > parseInt(pTo.value)) {
+    const tmp = pFrom.value;
+    pFrom.value = pTo.value;
+    pTo.value = tmp;
+    alert("⚠️ Ár értékek felcserélve / Price values swapped: " + pFrom.value + " – " + pTo.value + " €");
+  }
+  // --- ÚJ RÉSZ VÉGE ---
+  
   document.getElementById("btn-search").disabled = true;
   document.getElementById("btn-download").classList.remove("visible");
   document.getElementById("results-section").style.display = "none";
@@ -173,25 +177,14 @@ async function startSearch() {
   document.getElementById("progress-bar").style.width = "0%";
   document.getElementById("status-text").textContent = "Indítás... / Starting...";
 
-  // Km csere ellenőrzés
-  const kmFrom = document.getElementById("km_from");
-  const kmTo   = document.getElementById("km_to");
-  if (kmFrom.value && kmTo.value && parseInt(kmFrom.value) > parseInt(kmTo.value)) {
-    const tmp = kmFrom.value; kmFrom.value = kmTo.value; kmTo.value = tmp;
-    alert("⚠️ Km értékek felcserélve / Mileage values swapped: " + kmFrom.value + " – " + kmTo.value + " km");
-  }
-
   const payload = {
-    brand:       document.getElementById("brand").value,
-    model:       document.getElementById("model").value,
-    year_from:   document.getElementById("year_from").value,
-    year_to:     document.getElementById("year_to").value,
-    price_from:  document.getElementById("price_from").value,
-    price_to:    document.getElementById("price_to").value,
-    country:     document.getElementById("country").value,
-    km_from:     document.getElementById("km_from").value,
-    km_to:       document.getElementById("km_to").value,
-    seller_type: document.getElementById("seller_type").value,
+    brand:      document.getElementById("brand").value,
+    model:      document.getElementById("model").value,
+    year_from:  document.getElementById("year_from").value,
+    year_to:    document.getElementById("year_to").value,
+    price_from: document.getElementById("price_from").value,
+    price_to:   document.getElementById("price_to").value,
+    country:    document.getElementById("country").value,
   };
 
   const res = await fetch("/search", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });

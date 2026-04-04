@@ -293,16 +293,13 @@ def extract_price(text):
     return None
 
 def run_scrape(job_id, data):
-    brand       = data.get("brand", "")
-    model       = data.get("model", "")
-    year_from   = data.get("year_from") or None
-    year_to     = data.get("year_to") or None
-    price_from  = data.get("price_from") or None
-    price_to    = data.get("price_to") or None
-    country     = COUNTRIES.get(data.get("country", ""), "")
-    km_from     = data.get("km_from") or None
-    km_to       = data.get("km_to") or None
-    seller_type = data.get("seller_type") or None
+    brand      = data.get("brand", "")
+    model      = data.get("model", "")
+    year_from  = data.get("year_from") or None
+    year_to    = data.get("year_to") or None
+    price_from = data.get("price_from") or None
+    price_to   = data.get("price_to") or None
+    country    = COUNTRIES.get(data.get("country", ""), "")
 
     jobs[job_id]["brand"] = brand
     jobs[job_id]["model"] = model
@@ -332,9 +329,6 @@ def run_scrape(job_id, data):
                 if price_from: params += f"&pricefrom={price_from}"
                 if price_to:   params += f"&priceto={price_to}"
                 if country:    params += f"&cy={country}"
-                if km_from:     params += f"&kmfrom={km_from}"
-                if km_to:       params += f"&kmto={km_to}"
-                if seller_type: params += f"&sellertype={seller_type}"
                 if year_from or year_to:
                     params += "&sort=age&desc=1"
                 elif price_from or price_to:
@@ -509,7 +503,15 @@ def run_scrape(job_id, data):
 
     except Exception as e:
         log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
-        
+        # Ha már vannak összegyűjtött autók, azokat mentsük el
+        if cars:
+            cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
+            jobs[job_id]["cars"] = cars
+            jobs[job_id]["status"] = "done"
+            log(job_id, f"🎉 Részleges eredmény / Partial result: {len(cars)} listings / hirdetés.")
+        else:
+            jobs[job_id]["status"] = "error"
+            log(job_id, "❌ Nincs eredmény / No results collected.")
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
