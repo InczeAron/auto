@@ -552,21 +552,20 @@ def run_scrape(job_id, data):
                                     if not re.search(rf"\b{re.escape(model_clean)}\s?\d+", title_clean):
                                         continue
 
-                                # 🔥 BMW (pl: 3-as → 320d, 330e, stb.)
+                                # 🔥 BMW (javítás)
                                 elif brand.lower() == "bmw":
+                                    model_clean = model.lower().strip()
+                                    title_clean = title.lower().strip()
+
                                     num = re.search(r"\d+", model_clean)
                                     if num:
                                         n = num.group(0)
 
-                                        # 🔥 MINDENT lefed:
-                                        # 640d
-                                        # 6 Series
-                                        # 6 Gran Coupe
-                                        # 6er (NÉMET!)
-                                        if not re.search(rf"\b({n}\d{{2}}[a-z]?|{n}\s|{n}er)\b", title_clean):
+                                        # 🔥 CSAK ha közvetlenül a BMW után jön
+                                        if not re.search(rf"^bmw\s+({n}\d{{2}}[a-z]?|{n}er|{n}\b)", title_clean):
                                             continue
                                     else:
-                                        if not re.search(rf"\b{re.escape(model_clean)}\b", title_clean):
+                                        if not re.search(rf"^bmw\s+{re.escape(model_clean)}\b", title_clean):
                                             continue
 
                                 # 🔥 DEFAULT (többi márka)
