@@ -555,11 +555,22 @@ def run_scrape(job_id, data):
                                 # 🔥 BMW (javítás)
                                 elif brand.lower() == "bmw":
                                     num = re.search(r"\d+", model_clean)
-                                    if num:
+                                    if num and link:
                                         n = num.group(0)
 
-                                        # 🔥 csak a modellszámot nézzük (pl 7 → 740, 730 stb.)
-                                        if not re.search(rf"\b{n}\d{{2}}\b", title_clean):
+                                        # 🔥 modell kiszedése a linkből
+                                        slug = link.split("/offers/")[-1].split("?")[0].lower()
+
+                                        # pl: bmw-740-d-xdrive → 740
+                                        match = re.search(r"bmw-(\d{3})", slug)
+
+                                        if not match:
+                                            continue
+
+                                        model_number = match.group(1)
+
+                                        # 🔥 csak az első szám számít (7 → 740)
+                                        if not model_number.startswith(n):
                                             continue
 
                                 # 🔥 DEFAULT (többi márka)
