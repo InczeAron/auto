@@ -223,10 +223,12 @@ def index():
         # Ha már volt bent de a session lejárt, töröljük az IP-t és engedjük újra
         if "last_activity" not in session:
             try:
+                c = get_db()
+                cur = c.cursor()
                 cur.execute("DELETE FROM used_ips WHERE ip=%s", (ip,))
-                conn.commit()
+                c.commit()
             except Exception:
-                conn.rollback()
+                c.rollback()
         else:
             return "❌ Egyszer már beléptél / You have already entered once."
     save_ip(ip)
@@ -308,10 +310,25 @@ def run_scrape(job_id, data):
     jobs[job_id]["model"] = model
 
     brand_slug = brand.lower().replace(" ", "-")
-    model_slug = model.lower().replace(" ", "-")
-    # Mercedes-Benz külön kezelése
-    if brand_slug == "mercedes":
-        brand_slug = "mercedes-benz"
+    model_slug = model.lower().replace(" ", "-")    
+
+    # Mercedes-Benz model slug fix
+    if brand_slug == "mercedes-benz":
+        MERCEDES_MODEL_MAP = {
+            "a": "a-class",
+            "b": "b-class",
+            "c": "c-class",
+            "e": "e-class",
+            "s": "s-class",
+            "gla": "gla-class",
+            "glc": "glc-class",
+            "gle": "gle-class",
+            "glk": "glk-class",
+            "cla": "cla-class",
+            "cls": "cls-class",
+            "slk": "slk-class",
+        }
+        model_slug = MERCEDES_MODEL_MAP.get(model_slug, model_slug)
     cars = []
 
     try:
