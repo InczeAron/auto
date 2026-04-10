@@ -555,23 +555,24 @@ def run_scrape(job_id, data):
                                 # 🔥 BMW (javítás)
                                 elif brand.lower() == "bmw":
                                     num = re.search(r"\d+", model_clean)
-                                    if num and link:
+                                    if num:
                                         n = num.group(0)
-
-                                        # 🔥 modell kiszedése a linkből
-                                        slug = link.split("/offers/")[-1].split("?")[0].lower()
-
-                                        # pl: bmw-740-d-xdrive → 740
-                                        match = re.search(r"bmw-(\d{3})", slug)
-
-                                        if not match:
-                                            continue
-
-                                        model_number = match.group(1)
-
-                                        # 🔥 csak az első szám számít (7 → 740)
-                                        if not model_number.startswith(n):
-                                            continue
+                                        # Linkből próbáljuk kiszedni
+                                        if link:
+                                            slug = link.split("/offers/")[-1].split("?")[0].lower()
+                                            match = re.search(r"bmw-(\d+)", slug)
+                                            if match:
+                                                model_number = match.group(1)
+                                                if not model_number.startswith(n):
+                                                    continue
+                                            # Ha nincs szám a linkben, a cím alapján szűrünk
+                                            else:
+                                                if not re.search(rf"\b{re.escape(n)}", title_clean):
+                                                    continue
+                                        # Ha nincs link, cím alapján szűrünk
+                                        else:
+                                            if not re.search(rf"\b{re.escape(n)}", title_clean):
+                                                continue
 
                                 # 🔥 DEFAULT (többi márka)
                                 else:
