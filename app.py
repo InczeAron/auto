@@ -561,11 +561,11 @@ def run_scrape(job_id, data):
                                     if num:
                                         n = num.group(0)
 
-                                        # 🔥 CSAK ha közvetlenül a BMW után jön
-                                        if not re.search(rf"^bmw\s+({n}\d{{2}}[a-z]?|{n}er|{n}\b)", title_clean):
+                                        # 🔥 BMW után jöjjön a modell (nem feltétlen a cím elején)
+                                        if not re.search(rf"bmw.*\b({n}\d{{2}}[a-z]?|{n}er|{n}\s*series)\b", title_clean):
                                             continue
                                     else:
-                                        if not re.search(rf"^bmw\s+{re.escape(model_clean)}\b", title_clean):
+                                        if not re.search(rf"bmw.*\b{re.escape(model_clean)}\b", title_clean):
                                             continue
 
                                 # 🔥 DEFAULT (többi márka)
