@@ -347,7 +347,7 @@ def run_scrape(job_id, data):
 
             for page_num in range(1, 11):
                 params = f"page={page_num}"
-                if model:      params += f"&model={model.upper()}"
+                #if model:      params += f"&model={model.upper()}"
                 if year_from:  params += f"&fregfrom={year_from}"
                 if year_to:    params += f"&fregto={year_to}"
                 if price_from: params += f"&pricefrom={price_from}"
@@ -554,18 +554,12 @@ def run_scrape(job_id, data):
 
                                 # 🔥 BMW (javítás)
                                 elif brand.lower() == "bmw":
-                                    model_clean = model.lower().strip()
-                                    title_clean = title.lower().strip()
-
                                     num = re.search(r"\d+", model_clean)
                                     if num:
                                         n = num.group(0)
 
-                                        # 🔥 LAZÁBB + VALÓS PIACI FORMÁTUMOK
-                                        if not re.search(rf"\bbmw\b.*\b({n}\d{{2}}(\s?[a-z])?|{n}[\s\-]?(series|serie|reihe)?)", title_clean):
-                                            continue
-                                    else:
-                                        if not re.search(rf"\bbmw\b.*\b{re.escape(model_clean)}\b", title_clean):
+                                        # 🔥 csak a modellszámot nézzük (pl 7 → 740, 730 stb.)
+                                        if not re.search(rf"\b{n}\d{{2}}\b", title_clean):
                                             continue
 
                                 # 🔥 DEFAULT (többi márka)
