@@ -542,6 +542,11 @@ def run_scrape(job_id, data):
                             continue
 
                         if title:
+                            # 🔥 MODEL SZŰRÉS (pl. GLA csak önálló szóként)
+                            if model:
+                                pattern = rf"\b{re.escape(model.lower())}\b"
+                                if not re.search(pattern, title.lower()):
+                                    continue
                             # Ár megjelenítése: szám → formázott string                                       
                             price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
                             cars.append({
