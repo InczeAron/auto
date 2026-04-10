@@ -347,6 +347,7 @@ def run_scrape(job_id, data):
 
             for page_num in range(1, 11):
                 params = f"page={page_num}"
+                if model:      params += f"&model={model.upper()}"
                 if year_from:  params += f"&fregfrom={year_from}"
                 if year_to:    params += f"&fregto={year_to}"
                 if price_from: params += f"&pricefrom={price_from}"
