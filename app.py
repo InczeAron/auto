@@ -554,23 +554,12 @@ def run_scrape(job_id, data):
 
                                 # 🔥 BMW (javítás)
                                 elif brand.lower() == "bmw":
-                                    num = re.search(r"\d+", model_clean)
-                                    if num:
-                                        n = num.group(0)
-                                        # Linkből próbáljuk kiszedni
-                                        if link:
-                                            slug = link.split("/offers/")[-1].split("?")[0].lower()
-                                            match = re.search(r"bmw-(\d+)", slug)
-                                            if match:
-                                                model_number = match.group(1)
-                                                if not model_number.startswith(n):
-                                                    continue
-                                            # Ha nincs szám a linkben, a cím alapján szűrünk
-                                            else:
-                                                if not re.search(rf"\b{re.escape(n)}", title_clean):
-                                                    continue
-                                        # Ha nincs link, cím alapján szűrünk
-                                        else:
+                                    # Az AutoScout24 URL már szűr modellre
+                                    # Python oldali szűrés csak ha nincs link
+                                    if not link:
+                                        num = re.search(r"\d+", model_clean)
+                                        if num:
+                                            n = num.group(0)
                                             if not re.search(rf"\b{re.escape(n)}", title_clean):
                                                 continue
 
