@@ -558,14 +558,14 @@ def run_scrape(job_id, data):
                                     if num:
                                         n = num.group(0)
 
-                                        # 🔥 KÉT TÍPUS:
-                                        # 1. 6xx (pl 640d)
-                                        # 2. sima "6" (pl BMW 6 Gran Coupe / 6 Series)
-
-                                        if not re.search(rf"\b({n}\d{{2}}[a-z]?|{n}\s)\b", title_clean):
+                                        # 🔥 MINDENT lefed:
+                                        # 640d
+                                        # 6 Series
+                                        # 6 Gran Coupe
+                                        # 6er (NÉMET!)
+                                        if not re.search(rf"\b({n}\d{{2}}[a-z]?|{n}\s|{n}er)\b", title_clean):
                                             continue
                                     else:
-                                        # pl X5, M3 stb.
                                         if not re.search(rf"\b{re.escape(model_clean)}\b", title_clean):
                                             continue
 
