@@ -544,9 +544,31 @@ def run_scrape(job_id, data):
                         if title:
                             # 🔥 MODEL SZŰRÉS (pl. GLA csak önálló szóként)
                             if model:
-                                pattern = rf"\b{re.escape(model.lower())}\b"
-                                if not re.search(pattern, title.lower()):
-                                    continue
+                                model_clean = model.lower().strip()
+                                title_clean = title.lower().strip()
+
+                                # 🔥 MERCEDES
+                                if brand.lower() == "mercedes-benz":
+                                    if not re.search(rf"\b{re.escape(model_clean)}\s?\d+", title_clean):
+                                        continue
+
+                                # 🔥 BMW (pl: 3-as → 320d, 330e, stb.)
+                                elif brand.lower() == "bmw":
+                                    # kiszedjük a számot: "3-as" → "3"
+                                    num = re.search(r"\d+", model_clean)
+                                    if num:
+                                        n = num.group(0)
+
+                                        # pl: 3 → 3xx modellek
+                                        if not re.search(rf"\b{n}\d{{2}}[a-z]?\b", title_clean):
+                                            continue
+                                    else:
+                                        continue
+
+                                # 🔥 DEFAULT (többi márka)
+                                else:
+                                    if not re.search(rf"\b{re.escape(model_clean)}\b", title_clean):
+                                        continue
                             # Ár megjelenítése: szám → formázott string                                       
                             price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
                             cars.append({
