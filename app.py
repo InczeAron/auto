@@ -310,7 +310,24 @@ def run_scrape(job_id, data):
     jobs[job_id]["model"] = model
 
     brand_slug = brand.lower().replace(" ", "-")
-    model_slug = model.lower().replace(" ", "-")    
+    model_slug = model.lower().replace(" ", "-") 
+
+    # BMW sorozat slug mapping
+    BMW_SLUGS = {
+        "1-es": "1-series-(all)",
+        "2-es": "2-series-(all)",
+        "3-as": "3-series-(all)",
+        "4-es": "4-series-(all)",
+        "5-ös": "5-series-(all)",
+        "6-os": "6-series-(all)",
+        "7-es": "7-series-(all)",
+        "8-as": "8-series-(all)",
+        "x1": "x1", "x2": "x2", "x3": "x3",
+        "x4": "x4", "x5": "x5", "x6": "x6", "x7": "x7",
+        "z4": "z4", "m3": "m3", "m5": "m5",
+    }
+    if brand_slug == "bmw" and model.lower() in BMW_SLUGS:
+        model_slug = BMW_SLUGS[model.lower()]   
 
     # Mercedes-Benz model slug fix
     if brand_slug == "mercedes-benz":
@@ -552,21 +569,9 @@ def run_scrape(job_id, data):
                                     if not re.search(rf"\b{re.escape(model_clean)}\s?\d+", title_clean):
                                         continue
 
-                                # 🔥 BMW (javítás)
+                                # 🔥 BMW (javítás) URL már szűr sorozatra
                                 elif brand.lower() == "bmw":
-                                    # Az AutoScout24 URL már szűr modellre
-                                    # Python oldali szűrés csak ha nincs link
-                                    if not link:
-                                        num = re.search(r"\d+", model_clean)
-                                        if num:
-                                            n = num.group(0)
-                                            if not re.search(rf"\b{re.escape(n)}", title_clean):
-                                                continue
-
-                                # 🔥 DEFAULT (többi márka)
-                                else:
-                                    if not re.search(rf"\b{re.escape(model_clean)}\b", title_clean):
-                                        continue
+                                    pass
                             # Ár megjelenítése: szám → formázott string                                       
                             price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
                             cars.append({
