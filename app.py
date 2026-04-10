@@ -562,7 +562,7 @@ def run_scrape(job_id, data):
                                         n = num.group(0)
 
                                         # 🔥 LAZÁBB + VALÓS PIACI FORMÁTUMOK
-                                        if not re.search(rf"\bbmw\b.*\b({n}[\s\-]?(series|serie|reihe)?|{n}\d{{2}}[a-z]?)", title_clean):
+                                        if not re.search(rf"\bbmw\b.*\b({n}\d{{2}}(\s?[a-z])?|{n}[\s\-]?(series|serie|reihe)?)", title_clean):
                                             continue
                                     else:
                                         if not re.search(rf"\bbmw\b.*\b{re.escape(model_clean)}\b", title_clean):
