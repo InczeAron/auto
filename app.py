@@ -309,6 +309,9 @@ def run_scrape(job_id, data):
 
     brand_slug = brand.lower().replace(" ", "-")
     model_slug = model.lower().replace(" ", "-")
+    # Mercedes-Benz külön kezelése
+    if brand_slug == "mercedes":
+        brand_slug = "mercedes-benz"
     cars = []
 
     try:
