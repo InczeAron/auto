@@ -332,18 +332,18 @@ def run_scrape(job_id, data):
     # Mercedes-Benz model slug fix
     if brand_slug == "mercedes-benz":
         MERCEDES_MODEL_MAP = {
-            "a": "a-class",
-            "b": "b-class",
-            "c": "c-class",
-            "e": "e-class",
-            "s": "s-class",
-            "gla": "gla-class",
-            "glc": "glc-class",
-            "gle": "gle-class",
-            "glk": "glk-class",
-            "cla": "cla-class",
-            "cls": "cls-class",
-            "slk": "slk-class",
+            "a": "a series-(all)",
+            "b": "b series-(all)",
+            "c": "c series-(all)",
+            "e": "e series-(all)",
+            "s": "s series-(all)",
+            "gla": "gla (all)",
+            "glc": "glc (all)",
+            "gle": "gle (all)",
+            "glk": "glk (all)",
+            "cla": "cla (all)",
+            "cls": "cls (all)",
+            "slk": "slk (all)",
         }
         model_slug = MERCEDES_MODEL_MAP.get(model_slug, model_slug)
     cars = []
