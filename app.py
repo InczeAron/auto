@@ -314,14 +314,14 @@ def run_scrape(job_id, data):
 
     # BMW sorozat slug mapping
     BMW_SLUGS = {
-        "1-es": "1-series-(all)",
-        "2-es": "2-series-(all)",
-        "3-as": "3-series-(all)",
-        "4-es": "4-series-(all)",
-        "5-ös": "5-series-(all)",
-        "6-os": "6-series-(all)",
-        "7-es": "7-series-(all)",
-        "8-as": "8-series-(all)",
+        "1": "1-series-(all)",
+        "2": "2-series-(all)",
+        "3": "3-series-(all)",
+        "4": "4-series-(all)",
+        "5": "5-series-(all)",
+        "6": "6-series-(all)",
+        "7": "7-series-(all)",
+        "8": "8-series-(all)",
         "x1": "x1", "x2": "x2", "x3": "x3",
         "x4": "x4", "x5": "x5", "x6": "x6", "x7": "x7",
         "z4": "z4", "m3": "m3", "m5": "m5",
