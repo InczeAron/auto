@@ -332,11 +332,11 @@ def run_scrape(job_id, data):
     # Mercedes-Benz model slug fix
     if brand_slug == "mercedes-benz":
         MERCEDES_MODEL_MAP = {
-            "a":   "a-class-(all)",
-            "b":   "b-class-(all)",
-            "c":   "c-class-(all)",
-            "e":   "e-class-(all)",
-            "s":   "s-class-(all)",
+            "a":   "a-series-(all)",
+            "b":   "b-series-(all)",
+            "c":   "c-series-(all)",
+            "e":   "e-series-(all)",
+            "s":   "s-series-(all)",
             "gla": "gla-(all)",
             "glc": "glc-(all)",
             "gle": "gle-(all)",
