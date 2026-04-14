@@ -404,6 +404,8 @@ def run_scrape(job_id, data):
                 log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
+                print("URL:", url)
+
                 try:
                     page.wait_for_selector("article", timeout=8000)
                 except:
