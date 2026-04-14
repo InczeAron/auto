@@ -410,6 +410,8 @@ def run_scrape(job_id, data):
 
                 # DEBUG (nagyon fontos most)
                 print("URL:", url)
+                print("PAGE TITLE:", page.title())
+                print("URL:", page.url)
 
                 # 👉 csak EZUTÁN használd
                 page.goto(url)
@@ -417,7 +419,9 @@ def run_scrape(job_id, data):
                 try:
                     page.wait_for_selector("article", timeout=8000)
                 except:
-                    page.wait_for_selector("[data-testid='listing']", timeout=8000)
+                    page.wait_for_selector("article a[href*='/offers/']", timeout=10000)
+
+                print(len(page.query_selector_all("article")))
 
                 # 🔥 görgetés, hogy betöltse az összes hirdetést
                 page.mouse.wheel(0, 3000)
