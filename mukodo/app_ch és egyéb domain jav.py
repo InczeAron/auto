@@ -115,6 +115,25 @@ COUNTRIES = {
     "Luxembourg / Luxemburg":      "L",
 }
 
+DOMAIN_MAP = {
+    "D": "autoscout24.com",   # Németország
+    "A": "autoscout24.at",    # Ausztria
+    "CH": "autoscout24.ch",   # Svájc
+    "H": "autoscout24.hu",    # Magyarország
+    "I": "autoscout24.it",    # Olaszország
+    "F": "autoscout24.fr",    # Franciaország
+    "E": "autoscout24.es",    # Spanyolország
+    "NL": "autoscout24.nl",   # Hollandia
+    "PL": "autoscout24.pl",   # Lengyelország
+}
+
+MODEL_MAP_CH = {
+    "3": "3-series",
+    "3 series": "3-series",
+    "a4": "a4",
+    "passat": "passat",
+}
+
 # 30 perc inaktivitás után kiléptetés
 ALLOWED_ORIGINS = [
     "https://aronsoft.hu",
@@ -332,11 +351,11 @@ def run_scrape(job_id, data):
     # Mercedes-Benz model slug fix
     if brand_slug == "mercedes-benz":
         MERCEDES_MODEL_MAP = {
-            "a":   "a-class-(all)",
-            "b":   "b-class-(all)",
-            "c":   "c-class-(all)",
-            "e":   "e-class-(all)",
-            "s":   "s-class-(all)",
+            "a":   "a-series-(all)",
+            "b":   "b-series-(all)",
+            "c":   "c-series-(all)",
+            "e":   "e-series-(all)",
+            "s":   "s-series-(all)",
             "gla": "gla-(all)",
             "glc": "glc-(all)",
             "gle": "gle-(all)",
@@ -360,35 +379,81 @@ def run_scrape(job_id, data):
                 locale="hu-HU",
             )
             context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
-            page = context.new_page()
+            page = context.new_page()            
+
+            country = country.upper()
 
             for page_num in range(1, 11):
+
+                domain = DOMAIN_MAP.get(country, "autoscout24.com")
+
                 params = f"page={page_num}"
-                #if model:      params += f"&model={model.upper()}"
+
                 if year_from:  params += f"&fregfrom={year_from}"
                 if year_to:    params += f"&fregto={year_to}"
                 if price_from: params += f"&pricefrom={price_from}"
                 if price_to:   params += f"&priceto={price_to}"
-                if country:    params += f"&cy={country}"
-                if km_from:     params += f"&kmfrom={km_from}"
-                if km_to:       params += f"&kmto={km_to}"
-                if seller_type == "dealer":
-                    params += "&atype=C&adtype=D"
-                elif seller_type == "private":
-                    params += "&atype=C&adtype=P"
-                if year_from or year_to:
-                    params += "&sort=age&desc=1"
-                elif price_from or price_to:
-                    params += "&sort=price&desc=0"
 
-                url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
-                log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
-                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                if country and domain == "autoscout24.com":
+                    params += f"&cy={country}"
 
+                if km_from: params += f"&kmfrom={km_from}"
+                if km_to:   params += f"&kmto={km_to}"
+
+                # 🔥 ===== ITT KEZDŐDIK AZ ÚJ RÉSZ =====
+
+                if domain == "autoscout24.ch":
+
+                    model_slug_ch = MODEL_MAP_CH.get(model.lower(), model.lower())
+
+                    url = (
+                        f"https://www.autoscout24.ch/en?"
+                        f"makeModelVersions%5B0%5D%5BmakeKey%5D={brand_slug}"
+                        f"&makeModelVersions%5B0%5D%5BmodelGroupKey%5D={model_slug_ch}"
+                    )
+
+                    if year_from:
+                        url += f"&firstRegistrationYearFrom={year_from}"
+                    if year_to:
+                        url += f"&firstRegistrationYearTo={year_to}"
+
+                else:
+                    url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
+
+                # 🔥 ===== ITT VÉGE =====
+
+                print("URL:", url)
+
+                page.goto(url)
+
+                try:
+                    page.locator("button").filter(has_text="Accept").click(timeout=5000)
+                except:
+                    pass
+
+                try:
+                    page.locator("button").filter(has_text="Alle akzeptieren").click(timeout=5000)
+                except:
+                    pass
+
+                # várás
+                page.wait_for_timeout(6000)
+
+                # debug
+                print("URL:", page.url)
+                print("TITLE:", page.title())
+
+                # nem várunk selectorra!
+                cars = page.query_selector_all("article")
+
+                print("TALÁLATOK:", len(cars))
+                
                 try:
                     page.wait_for_selector("article", timeout=8000)
                 except:
-                    page.wait_for_selector("[data-testid='listing']", timeout=8000)
+                    page.wait_for_selector("article a[href*='/offers/']", timeout=10000)
+
+                print(len(page.query_selector_all("article")))
 
                 # 🔥 görgetés, hogy betöltse az összes hirdetést
                 page.mouse.wheel(0, 3000)
@@ -502,7 +567,7 @@ def run_scrape(job_id, data):
 
                                 if href:
                                     if href.startswith("/"):
-                                        link = "https://www.autoscout24.com" + href
+                                        link = f"https://www.{domain}" + href
                                     else:
                                         link = href
 
