@@ -404,7 +404,14 @@ def run_scrape(job_id, data):
                 log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
+                print("COUNTRY:", country)
+                print("DOMAIN:", domain)
                 print("URL:", url)
+
+                if domain != "autoscout24.com":
+                    url = f"https://www.{domain}/cars/{brand_slug}/{model_slug}?{params}"
+                else:
+                    url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
 
                 try:
                     page.wait_for_selector("article", timeout=8000)
