@@ -416,6 +416,30 @@ def run_scrape(job_id, data):
                 # 👉 csak EZUTÁN használd
                 page.goto(url)
 
+                # cookie
+                try:
+                    page.click("button:has-text('Accept')", timeout=3000)
+                except:
+                    pass
+
+                try:
+                    page.click("button:has-text('Alle akzeptieren')", timeout=3000)
+                except:
+                    pass
+
+                # várás
+                page.wait_for_timeout(4000)
+
+                # debug
+                print("URL:", page.url)
+                print("TITLE:", page.title())
+
+                # selector
+                page.wait_for_selector("article", timeout=15000)
+
+                cars = page.query_selector_all("article")
+                print("TALÁLATOK:", len(cars))
+                
                 try:
                     page.wait_for_selector("article", timeout=8000)
                 except:
