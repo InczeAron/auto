@@ -127,6 +127,13 @@ DOMAIN_MAP = {
     "PL": "autoscout24.pl",   # Lengyelország
 }
 
+MODEL_MAP_CH = {
+    "3": "3-series",
+    "3 series": "3-series",
+    "a4": "a4",
+    "passat": "passat",
+}
+
 # 30 perc inaktivitás után kiléptetés
 ALLOWED_ORIGINS = [
     "https://aronsoft.hu",
@@ -393,27 +400,31 @@ def run_scrape(job_id, data):
                 if km_from: params += f"&kmfrom={km_from}"
                 if km_to:   params += f"&kmto={km_to}"
 
-                if seller_type == "dealer":
-                    params += "&atype=C&adtype=D"
-                elif seller_type == "private":
-                    params += "&atype=C&adtype=P"
+                # 🔥 ===== ITT KEZDŐDIK AZ ÚJ RÉSZ =====
 
-                # 🔥 👉 IDE jön a FIX2
-                if domain == "autoscout24.com":
-                    url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
+                if domain == "autoscout24.ch":
+
+                    model_slug_ch = MODEL_MAP_CH.get(model.lower(), model.lower())
+
+                    url = (
+                        f"https://www.autoscout24.ch/en?"
+                        f"makeModelVersions%5B0%5D%5BmakeKey%5D={brand_slug}"
+                        f"&makeModelVersions%5B0%5D%5BmodelGroupKey%5D={model_slug_ch}"
+                    )
+
+                    if year_from:
+                        url += f"&firstRegistrationYearFrom={year_from}"
+                    if year_to:
+                        url += f"&firstRegistrationYearTo={year_to}"
+
                 else:
-                    url = f"https://www.{domain}/cars/{brand_slug}/{model_slug}?{params}"
+                    url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
 
-                # 🔥 biztos fallback
-                if not url:
-                    url = f"https://www.{domain}/cars?{params}"
+                # 🔥 ===== ITT VÉGE =====
 
-                # DEBUG (nagyon fontos most)
                 print("URL:", url)
-                print("PAGE TITLE:", page.title())
-                print("URL:", page.url)
 
-                page.goto(url, wait_until="domcontentloaded")
+                page.goto(url)
 
                 try:
                     page.locator("button").filter(has_text="Accept").click(timeout=5000)
