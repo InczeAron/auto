@@ -372,21 +372,28 @@ def run_scrape(job_id, data):
                 locale="hu-HU",
             )
             context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
-            page = context.new_page()
+            page = context.new_page()            
 
-            domain = DOMAIN_MAP.get(country, "autoscout24.com")
+            country = country.upper()
 
             for page_num in range(1, 11):
+                domain = DOMAIN_MAP.get(country, "autoscout24.com")
                 params = f"page={page_num}"
+                
+                print("-----")
+                print("COUNTRY:", country)
+                print("DOMAIN:", domain)
+                print("PARAMS:", params)
+                print("URL:", url)
                 #if model:      params += f"&model={model.upper()}"
                 if year_from:  params += f"&fregfrom={year_from}"
                 if year_to:    params += f"&fregto={year_to}"
                 if price_from: params += f"&pricefrom={price_from}"
                 if price_to:   params += f"&priceto={price_to}"
-                if country:    params += f"&cy={country}"
+                #if country:    params += f"&cy={country}"
                 # csak .com esetén használjuk a country paramétert
-                """if country and domain == "autoscout24.com":
-                    params += f"&cy={country}"""
+                if country and domain == "autoscout24.com":
+                    params += f"&cy={country}"
                 if km_from:     params += f"&kmfrom={km_from}"
                 if km_to:       params += f"&kmto={km_to}"
                 if seller_type == "dealer":
@@ -398,11 +405,13 @@ def run_scrape(job_id, data):
                 elif price_from or price_to:
                     params += "&sort=price&desc=0"
 
-                url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
+                #url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
                 #domain = DOMAIN_MAP.get(country, "autoscout24.com")
-                #url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
+                url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
                 log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+                print("URL:", url)
 
                 """print("COUNTRY:", country)
                 print("DOMAIN:", domain)
