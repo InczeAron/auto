@@ -377,7 +377,7 @@ def run_scrape(job_id, data):
             country = country.upper()
 
             for page_num in range(1, 11):
-                domain = DOMAIN_MAP.get(country, "autoscout24.com")
+                domain = DOMAIN_MAP.get(country.upper(), "autoscout24.com")
                 params = f"page={page_num}"
                 
                 print("-----")
@@ -407,11 +407,8 @@ def run_scrape(job_id, data):
 
                 #url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
                 #domain = DOMAIN_MAP.get(country, "autoscout24.com")
-                #url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
-                if domain == "autoscout24.com":
-                    url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
-                else:
-                    url = f"https://www.{domain}/cars/{brand_slug}/{model_slug}?{params}"
+                
+                url = f"https://www.{domain}/lst/{brand_slug}/{model_slug}?{params}"
                 log(job_id, f"📄 Loading page / Oldal betöltése: {page_num}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
@@ -549,7 +546,7 @@ def run_scrape(job_id, data):
 
                                 if href:
                                     if href.startswith("/"):
-                                        link = "https://www.autoscout24.com" + href
+                                        link = f"https://www.{domain}" + href
                                     else:
                                         link = href
 
