@@ -78,78 +78,39 @@ def get_cors_origin():
     origin = request.headers.get("Origin", "")
     return origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
 
+EMAIL = "inczearon@gmail.com"
 HASH = b"$2b$12$kjpt7BVsuqPJos.ZF767OeguUcJqR9GiKWYx.GrgdK.Mwirxk9ssW"
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        email = request.form.get("email")
         password = request.form.get("password").encode("utf-8")
 
-        if bcrypt.checkpw(password, HASH):
+        if email == EMAIL and bcrypt.checkpw(password, HASH):
             session["logged_in"] = True
             return redirect("/")
         else:
-            return "Hibás jelszó"
+            return "Hibás email vagy jelszó"
 
     return render_template("index.html")
 
-"""@app.route("/api/login", methods=["POST", "OPTIONS"])
-def api_login():
-    if request.method == "OPTIONS":
-        res = app.make_default_options_response()
-        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-        res.headers["Access-Control-Allow-Headers"] = "Content-Type"
-        res.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-        return res
+@app.route("/")
+def index():
+    if not session.get("logged_in"):
+        return redirect("/login")
 
-    data = request.json or {}
+    return render_template("index.html")
 
-    email = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").strip().encode("utf-8")
+@app.route("/run", methods=["POST"])
+def run():
+    if not session.get("logged_in"):
+        return redirect("/login")
 
-    if not email or not password:
-        res = jsonify({"success": False, "error": "Hiányzó adatok"})
-        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-        return res, 400
+    # ide jön a scraper
+    print("SCRAPER FUT")
 
-    try:
-        c = get_db()
-        cur = c.cursor()
-        cur.execute("SELECT jelsz FROM befele WHERE felh = %s", (email,))
-        row = cur.fetchone()
-    except Exception as e:
-        print("DB ERROR:", e)
-        try:
-            get_db().rollback()
-        except Exception:
-            pass
-        res = jsonify({"success": False, "error": "DB hiba"})
-        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-        return res, 500
-
-    pw_plain = password.decode("utf-8").strip()
-    print("EMAIL:", email)
-    print("ROW FOUND:", row is not None)
-
-    if row:
-        stored = row[0].strip()
-        print("STORED:", stored)
-        try:
-            match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
-        except Exception:
-            # fallback: sima szöveges összehasonlítás ha nincs bcrypt hash
-            match = (pw_plain == stored)
-
-        if match:
-            session["logged_in"] = True
-            res = jsonify({"success": True})
-        else:
-            res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
-    else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
-
-    res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-    return res"""
+    return "Lefutott"
 
 @app.route("/projects")
 def projects():
