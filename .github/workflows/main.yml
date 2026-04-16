@@ -24,4 +24,4 @@ jobs:
           playwright install --with-deps
 
       - name: Run scraper
-        run: python app.py
+        run: python app_auto.py
