@@ -1,28 +1,17 @@
-# ============================================
-# AutoScout24 Car Search – Flask Web Server
-# ============================================
-# Install:
-#   pip install flask playwright openpyxl psycopg2-binary
-#   playwright install chromium
-#
-# Run:
-#   python app.py
-# ============================================
-
-from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+"""
+import os
+import time
+import re
+import smtplib
+from email.mime.text import MIMEText
 from playwright.sync_api import sync_playwright
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-import time, os, re, threading, uuid, secrets
-import psycopg2
-import bcrypt
 
-app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
+# ide másold:
+# - BRANDS
+# - COUNTRIES
+# - extract_price()
 
-jobs = {}
-
-BRANDS = {
+RANDS = {
     "Audi":       ["A1","A2","A3","A4","A5","A6","A7","A8","Q3","Q5","Q7","TT","R8"],
     "BMW":        ["1","2","3","4","5","6","7","X1","X3","X5","Z4","M3","M5"],
     "Mercedes-Benz":   ["A","B","C","E","S","GLA","GLC","GLE","GLK","CLA","CLS","SLK"],
@@ -66,113 +55,6 @@ COUNTRIES = {
     "Luxembourg / Luxemburg":      "L",
 }
 
-# 30 perc inaktivitás után kiléptetés
-ALLOWED_ORIGINS = [
-    "https://aronsoft.hu",
-    "https://www.aronsoft.hu",
-    "http://aronsoft.hu",
-    "http://www.aronsoft.hu",
-]
-
-def get_cors_origin():
-    origin = request.headers.get("Origin", "")
-    return origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
-
-EMAIL = "inczearon@gmail.com"
-HASH = b"$2b$12$kjpt7BVsuqPJos.ZF767OeguUcJqR9GiKWYx.GrgdK.Mwirxk9ssW"
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email")
-        password = request.form.get("password").encode("utf-8")
-
-        if email == EMAIL and bcrypt.checkpw(password, HASH):
-            session["logged_in"] = True
-            return redirect("/")
-        else:
-            return "Hibás email vagy jelszó"
-
-    return render_template("index.html")
-
-@app.route("/")
-def index():
-    if not session.get("logged_in"):
-        return redirect("/login")
-
-    return render_template("index.html")
-
-@app.route("/run", methods=["POST"])
-def run():
-    if not session.get("logged_in"):
-        return redirect("/login")
-
-    # ide jön a scraper
-    print("SCRAPER FUT")
-
-    return "Lefutott"
-
-@app.route("/projects")
-def projects():
-    if not session.get("logged_in"):
-        return redirect("/")
-    return render_template("projects.html")
-
-@app.before_request
-def session_timeout():
-    # Statikus és login route-ok kihagyása
-    if request.endpoint in ("static",):
-        return
-    if "last_activity" in session:
-        now = time.time()
-        if now - session["last_activity"] > 1800:
-            session.clear()
-            # JSON kérés esetén 401, egyébként üzenet
-            if request.is_json or request.path.startswith(("/search", "/status", "/download", "/models")):
-                return jsonify({"error": "session_expired"}), 401
-            return "❌ Session expired / Munkamenet lejárt. <a href='/'>Refresh</a>", 401
-    session["last_activity"] = time.time()
-
-@app.route("/")
-def index():
-    if not session.get("logged_in"):
-        return redirect("/login")
-
-    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
-
-@app.route("/models/<brand>")
-def get_models(brand):
-    return jsonify(BRANDS.get(brand, []))
-
-@app.route("/search", methods=["POST"])
-def search():
-    data = request.json
-    job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "running", "progress": 0, "log": [], "cars": []}
-    thread = threading.Thread(target=run_scrape, args=(job_id, data))
-    thread.daemon = True
-    thread.start()
-    return jsonify({"job_id": job_id})
-
-@app.route("/status/<job_id>")
-def status(job_id):
-    return jsonify(jobs.get(job_id, {}))
-
-@app.route("/download/<job_id>")
-def download(job_id):
-    job = jobs.get(job_id)
-    if not job or not job.get("cars"):
-        return "No data / Nincs adat", 404
-    filepath = os.path.join("outputs", f"{job_id}.xlsx")
-    os.makedirs("outputs", exist_ok=True)
-    save_to_excel(job["cars"], filepath, job["brand"], job["model"])
-    return send_file(filepath, as_attachment=True,
-                     download_name=f"{job['brand']}_{job['model']}_listing.xlsx")
-
-def log(job_id, msg):
-    jobs[job_id]["log"].append(msg)
-    print(msg)
-
 def extract_price(text):
     if not text:
         return None
@@ -200,7 +82,18 @@ def extract_price(text):
 
     return None
 
-def run_scrape(job_id, data):
+def run_scraper():
+    print("SCRAPER FUT")
+
+    cars = []
+
+    # 🔥 IDE MÁSOLD A run_scrape BELSEJÉT
+    # DE:
+    # ❌ job_id nélkül
+    # ❌ jobs dict nélkül
+    # ❌ log() nélkül
+
+    def run_scrape():
     brand       = data.get("brand", "")
     model       = data.get("model", "")
     year_from   = data.get("year_from") or None
@@ -212,8 +105,8 @@ def run_scrape(job_id, data):
     km_to       = data.get("km_to") or None
     seller_type = data.get("seller_type") or None
 
-    jobs[job_id]["brand"] = brand
-    jobs[job_id]["model"] = model
+    #jobs[job_id]["brand"] = brand
+    #jobs[job_id]["model"] = model
 
     brand_slug = brand.lower().replace(" ", "-")
     model_slug = model.lower().replace(" ", "-") 
@@ -512,75 +405,126 @@ def run_scrape(job_id, data):
             jobs[job_id]["status"] = "error"
             log(job_id, "❌ Nincs eredmény / No results collected.")                         
 
-def save_to_excel(cars, filepath, brand, model):
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"{brand} {model}"
 
-    headers = ["#", "Cím / Title", "Ár / Price", "Részletek / Details", "Helyszín / Location", "Link", "Ár értékelés / Price Rating"]
-    header_fill = PatternFill("solid", start_color="1F3864")
-    header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
-    for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=header)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 22
+    return cars
 
-    # Átlagár számítás Ár_num alapján
-    valid_prices = [c["Ár_num"] for c in cars if c["Ár_num"]]
-    avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
-    for i, car in enumerate(cars, 1):
-        row = i + 1
-        fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
-        values = [i, car["Cím"], car["Ár"], car["Részletek"], car["Helyszín"], car["Link"]]
-        for col, val in enumerate(values, 1):
-            cell = ws.cell(row=row, column=col, value=val)
-            cell.fill = fill
-            cell.alignment = Alignment(vertical="center")
-            if col == 6 and val:
-                cell.hyperlink = val
-                cell.value = "Open"
-                cell.font = Font(name="Arial", size=10, color="0563C1", underline="single")
-            else:
-                cell.font = Font(name="Arial", size=10)
+def format_email(cars):
+    if not cars:
+        return "Nincs találat"
 
-        # Ár értékelés – Ár_num alapján (szám!)
-        price_num = car["Ár_num"]
-        eval_cell = ws.cell(row=row, column=7)
-        eval_cell.fill = fill
-        eval_cell.alignment = Alignment(horizontal="center", vertical="center")
-        if avg_price > 0 and price_num and price_num > 0:
-            diff_pct = (avg_price - price_num) / avg_price * 100
-            if diff_pct >= 15:
-                eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
-                eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
-            else:
-                eval_cell.value = ""
-                eval_cell.font = Font(name="Arial", size=10)
-        else:
-            eval_cell.value = ""
-            eval_cell.font = Font(name="Arial", size=10)
+    top = cars[:5]
 
-    avg_row = len(cars) + 2
-    avg_fill = PatternFill("solid", start_color="1F3864")
-    lbl = ws.cell(row=avg_row, column=2, value="Átlagár / Average Price:")
-    lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    lbl.fill = avg_fill
-    lbl.alignment = Alignment(horizontal="right", vertical="center")
-    v = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
-    v.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    v.fill = avg_fill
-    v.alignment = Alignment(horizontal="center", vertical="center")
-    for col in [1, 4, 5, 6, 7]:
-        ws.cell(row=avg_row, column=col).fill = avg_fill
+    text = "🔥 TOP DEALS:\n\n"
+    for c in top:
+        text += f"{c['Cím']}\n{c['Ár']}\n{c['Link']}\n\n"
 
-    for col, width in enumerate([5, 35, 15, 45, 30, 10, 20], 1):
-        ws.column_dimensions[ws.cell(1, col).column_letter].width = width
-    ws.freeze_panes = "A2"
-    wb.save(filepath)
+    return text
+
+
+def send_email(content):
+    EMAIL = os.getenv("EMAIL_USER")
+    PASSWORD = os.getenv("EMAIL_PASS")
+
+    msg = MIMEText(content)
+    msg["Subject"] = "🚗 Auto Deals"
+    msg["From"] = EMAIL
+    msg["To"] = EMAIL
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(EMAIL, PASSWORD)
+        server.send_message(msg)
+
+    print("EMAIL ELKÜLDVE")
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    cars = run_scraper()
+    content = format_email(cars)
+    send_email(content)"""
+
+#--------------------------------------------- github scrapper ------------------------------------------
+import time, re
+from playwright.sync_api import sync_playwright
+
+def extract_price(text):
+    if not text:
+        return None
+    text = text.replace("\xa0", " ").strip()
+    match = re.search(r"\d{1,3}(?:[.,\s]\d{3})+", text)
+    if not match:
+        return None
+    number = re.sub(r"[^\d]", "", match.group(0))
+    if not number:
+        return None
+    value = int(number)
+    return value if 500 < value < 500000 else None
+
+
+def run_scraper():
+    print("SCRAPER FUT")
+
+    # 👉 IDE ÍRD BE FIXEN amit keresel (később paraméterezheted)
+    brand = "bmw"
+    model = "3"
+    year_from = 2020
+    year_to = 2024
+    price_from = None
+    price_to = None
+    country = "D"
+
+    brand_slug = brand.lower()
+    model_slug = "3-series-(all)"
+
+    cars = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        for page_num in range(1, 3):  # teszthez elég 2 oldal
+            params = f"page={page_num}&fregfrom={year_from}&fregto={year_to}&cy={country}"
+            url = f"https://www.autoscout24.com/lst/{brand_slug}/{model_slug}?{params}"
+
+            print("URL:", url)
+
+            page.goto(url, timeout=30000)
+
+            try:
+                page.wait_for_selector("article", timeout=8000)
+            except:
+                print("Nincs találat")
+                continue
+
+            articles = page.locator("article").all()
+
+            print("Találatok:", len(articles))
+
+            for article in articles:
+                try:
+                    title = article.locator("h2").first.inner_text(timeout=1000).strip()
+
+                    price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000)
+                    price_num = extract_price(price_text)
+
+                    link = article.locator("a[href*='/offers/']").first.get_attribute("href")
+                    if link and link.startswith("/"):
+                        link = "https://www.autoscout24.com" + link
+
+                    cars.append({
+                        "Cím": title,
+                        "Ár": price_text,
+                        "Ár_num": price_num,
+                        "Link": link
+                    })
+
+                except:
+                    continue
+
+        browser.close()
+
+    cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
+
+    print(f"Talált autók: {len(cars)}")
+
+    return cars
