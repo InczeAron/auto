@@ -20,55 +20,6 @@ import bcrypt
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
 
-# =========================
-# DATABASE
-# =========================
-_conn = None
-
-def get_db():
-    global _conn
-    try:
-        if _conn is None or _conn.closed:
-            _conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        else:
-            # ping – ha megszakadt a kapcsolat, újracsatlakozik
-            _conn.cursor().execute("SELECT 1")
-    except Exception:
-        _conn = psycopg2.connect(os.environ["DATABASE_URL"])
-    return _conn
-
-# Táblák létrehozása induláskor
-def init_db():
-    c = get_db()
-    cur = c.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT PRIMARY KEY)")
-    c.commit()
-
-init_db()
-
-# =========================
-# IP KEZELÉS
-# =========================
-def get_user_ip():
-    if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0]
-    return request.remote_addr
-
-def has_ip(ip):
-    c = get_db()
-    cur = c.cursor()
-    cur.execute("SELECT 1 FROM used_ips WHERE ip=%s", (ip,))
-    return cur.fetchone() is not None
-
-def save_ip(ip):
-    try:
-        c = get_db()
-        cur = c.cursor()
-        cur.execute("INSERT INTO used_ips (ip) VALUES (%s)", (ip,))
-        c.commit()
-    except Exception:
-        get_db().rollback()
-
 jobs = {}
 
 BRANDS = {
@@ -127,7 +78,22 @@ def get_cors_origin():
     origin = request.headers.get("Origin", "")
     return origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
 
-@app.route("/api/login", methods=["POST", "OPTIONS"])
+HASH = b"$2b$12$kjpt7BVsuqPJos.ZF767OeguUcJqR9GiKWYx.GrgdK.Mwirxk9ssW"
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        password = request.form.get("password").encode("utf-8")
+
+        if bcrypt.checkpw(password, HASH):
+            session["logged_in"] = True
+            return redirect("/")
+        else:
+            return "Hibás jelszó"
+
+    return render_template("index.html")
+
+"""@app.route("/api/login", methods=["POST", "OPTIONS"])
 def api_login():
     if request.method == "OPTIONS":
         res = app.make_default_options_response()
@@ -183,16 +149,7 @@ def api_login():
         res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
 
     res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-    return res
-
-# Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
-"""@app.route("/api/hash", methods=["GET"])
-def api_hash():
-    pw = request.args.get("pw", "")
-    if not pw:
-        return "?pw=yourpassword", 400
-    hashed = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    return jsonify({"hash": hashed})"""
+    return res"""
 
 @app.route("/projects")
 def projects():
@@ -215,23 +172,11 @@ def session_timeout():
             return "❌ Session expired / Munkamenet lejárt. <a href='/'>Refresh</a>", 401
     session["last_activity"] = time.time()
 
-# ip figyelés csak 1x lehessen belépni ip alapján
 @app.route("/")
 def index():
-    ip = get_user_ip()
-    if has_ip(ip):
-        # Ha már volt bent de a session lejárt, töröljük az IP-t és engedjük újra
-        if "last_activity" not in session:
-            try:
-                c = get_db()
-                cur = c.cursor()
-                cur.execute("DELETE FROM used_ips WHERE ip=%s", (ip,))
-                c.commit()
-            except Exception:
-                c.rollback()
-        else:
-            return "❌ Egyszer már beléptél / You have already entered once."
-    save_ip(ip)
+    if not session.get("logged_in"):
+        return redirect("/login")
+
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
