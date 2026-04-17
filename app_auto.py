@@ -559,5 +559,5 @@ def run_scraper():
 
     return cars
 
-    if __name__ == "__main__":
-        run_scraper()
+if __name__ == "__main__":
+    run_scraper()
