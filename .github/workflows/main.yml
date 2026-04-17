@@ -28,3 +28,9 @@ jobs:
 
       - name: Run scraper
         run: python app_auto.py
+
+      - name: Upload Excel
+        uses: actions/upload-artifact@v4
+        with:
+          name: autos
+          path: autoscout_results_2020-24_bmww3_DE.xlsx
