@@ -169,7 +169,7 @@ def run_scraper():
                 c["rating"] = None
 
     # rendezés
-    cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
+    cars.sort(key=lambda x: x["price"] if x["price"] else 999999)
 
     print(f"\n🎯 Talált autók: {len(cars)}")
 
