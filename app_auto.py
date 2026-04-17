@@ -446,6 +446,7 @@ if __name__ == "__main__":
 #--------------------------------------------- github scrapper ------------------------------------------
 import time, re
 from playwright.sync_api import sync_playwright
+from openpyxl import Workbook
 
 def extract_price(text):
     if not text:
@@ -520,11 +521,38 @@ def run_scraper():
 
                 except:
                     continue
+                
 
         browser.close()
 
     cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
 
+    # 📊 Excel mentés
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Autos"
+
+    # fejléc
+    ws.append(["Cím", "Ár", "Ár_num", "Link"])
+
+    # adatok
+    for car in cars:
+        ws.append([
+            car["Cím"],
+            car["Ár"],
+            car["Ár_num"],
+            car["Link"]
+        ])
+
+    # mentés
+    filename = "autoscout_results_2020-24_bmww3_DE.xlsx"
+    wb.save(filename)
+
+    print(f"Excel mentve: {filename}")
+
     print(f"Talált autók: {len(cars)}")
+
+    for car in cars[:10]:
+        print(car)
 
     return cars
