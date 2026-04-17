@@ -21,14 +21,25 @@ def extract_price(text):
 
 
 def save_to_excel(cars, filename):
+    from openpyxl import Workbook
+
     wb = Workbook()
     ws = wb.active
-    ws.title = "Autos"
 
-    ws.append(["Cím", "Ár", "Link"])
+    # fejléc
+    ws.append(["Title", "Price (€)", "KM", "Year", "Fuel", "Location", "Link", "Rating"])
 
     for car in cars:
-        ws.append([car["Cím"], car["Ár"], car["Link"]])
+        ws.append([
+            car.get("title"),
+            car.get("price_text"),
+            car.get("km"),
+            car.get("year"),
+            car.get("fuel"),
+            car.get("location"),
+            car.get("link"),
+            car.get("rating"),
+        ])
 
     wb.save(filename)
     print(f"Excel mentve: {filename}")
@@ -114,6 +125,12 @@ def run_scraper():
                 if i > 30:  # limit
                     break
 
+                year = ""
+                fuel = ""
+                location = ""
+                rating = 0
+                km = None
+
                 try:
                     title = article.locator("h2").first.inner_text(timeout=1000)
 
@@ -128,12 +145,16 @@ def run_scraper():
                         "title": title,
                         "price": price_num,
                         "price_text": price_text,
-                        "km": None,
-                        "year": None,
-                        "fuel": None,
-                        "location": "",
-                        "link": link
+                        "km": km,
+                        "year": year,
+                        "fuel": fuel,
+                        "location": location,
+                        "link": link,
+                        "rating": rating
                     })
+
+                    if not price_num:
+                        continue
 
                     details = article.locator("span").all()
 
@@ -169,7 +190,7 @@ def run_scraper():
                 c["rating"] = None
 
     # rendezés
-    cars.sort(key=lambda x: x["price"] if x["price"] else 999999)
+    cars.sort(key=lambda x: x.get("price") or 999999)
 
     print(f"\n🎯 Talált autók: {len(cars)}")
 
