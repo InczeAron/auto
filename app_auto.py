@@ -1,9 +1,10 @@
 
     #----------------------------- új verzió tisztán chat gpt-től --------------------
 
-import time, re
+import time, re, smtplib
 from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
+from email.message import EmailMessage
 
 
 def extract_price(text):
@@ -26,24 +27,103 @@ def save_to_excel(cars, filename):
     wb = Workbook()
     ws = wb.active
 
-    # fejléc
-    ws.append(["Title", "Price (€)", "KM", "Year", "Fuel", "Location", "Link", "Rating"])
+    # ✅ fejléc
+    ws.append(["#", "Cím", "Ár", "Km", "Év", "Üzemanyag", "Helyszín", "Link", "Pontszám"])
 
     for car in cars:
         ws.append([
-            car.get("title"),
-            car.get("price_text"),
-            car.get("km"),
-            car.get("year"),
-            car.get("fuel"),
-            car.get("location"),
-            car.get("link"),
-            car.get("rating"),
+            car.get("Sorszám"),
+            car.get("Cím"),
+            car.get("Ár"),
+            car.get("Km"),
+            car.get("Év"),
+            car.get("Üzemanyag"),
+            car.get("Helyszín"),
+            "Open",
+            car.get("Pontszám")
         ])
+
+        # ✅ kattintható link
+        row = ws.max_row
+        ws.cell(row=row, column=8).hyperlink = car.get("Link")
 
     wb.save(filename)
     print(f"Excel mentve: {filename}")
 
+def generate_html(cars):
+    html = """
+    <h2>🚗 TOP autó ajánlatok</h2>
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse;">
+        <tr style="background:#2c3e50; color:white;">
+            <th>#</th>
+            <th>Cím</th>
+            <th>Ár</th>
+            <th>Helyszín</th>
+            <th>Link</th>
+            <th>Értékelés</th>
+        </tr>
+    """
+
+    for c in cars[:20]:  # TOP 20
+        html += f"""
+        <tr>
+            <td>{c.get("Sorszám")}</td>
+            <td>{c.get("Cím")}</td>
+            <td>{c.get("Ár")}</td>
+            <td>{c.get("Helyszín")}</td>
+            <td><a href="{c.get("Link")}">Open</a></td>
+            <td style="color:green;">{c.get("Pontszám")}% cheaper</td>
+        </tr>
+        """
+
+    html += "</table>"
+    return html    
+
+def send_email(cars, excel_path, client_email=None):
+    sender = "aronincze@aronsoft.hu"
+    password = "d.mh4pTXp8"  # ⚠️ majd env-be rakjuk!
+
+    html = generate_html(cars)
+
+    msg = EmailMessage()
+    msg["Subject"] = "🚗 AutoScout Jelentés"
+    msg["From"] = sender
+    msg["To"] = sender  # te kapod
+
+    msg.set_content("HTML szükséges")
+    msg.add_alternative(html, subtype="html")
+
+    # 📎 Excel csatolás
+    with open(excel_path, "rb") as f:
+        msg.add_attachment(
+            f.read(),
+            maintype="application",
+            subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=excel_path
+        )
+
+    # küldés
+    with smtplib.SMTP_SSL("mail.aronsoft.hu", 465) as smtp:
+        smtp.login(sender, password)
+        smtp.send_message(msg)
+
+    print("📧 Saját email elküldve")
+
+    # 👤 ÜGYFÉL EMAIL (csak lista)
+    if client_email:
+        msg2 = EmailMessage()
+        msg2["Subject"] = "🚗 Új autó ajánlatok"
+        msg2["From"] = sender
+        msg2["To"] = client_email
+
+        msg2.set_content("HTML szükséges")
+        msg2.add_alternative(html, subtype="html")
+
+        with smtplib.SMTP_SSL("mail.aronsoft.hu", 465) as smtp:
+            smtp.login(sender, password)
+            smtp.send_message(msg2)
+
+        print("📧 Ügyfél email elküldve")
 
 def run_scraper():
     print("🚀 SCRAPER START")
@@ -142,15 +222,16 @@ def run_scraper():
                         link = "https://www.autoscout24.com" + link
 
                     cars.append({
-                        "title": title,
-                        "price": price_num,
-                        "price_text": price_text,
-                        "km": km,
-                        "year": year,
-                        "fuel": fuel,
-                        "location": location,
-                        "link": link,
-                        "rating": rating
+                        "Sorszám": len(cars) + 1,
+                        "Cím": title,
+                        "Ár": f"{price_num:,} €".replace(",", ".") if price_num else price_text,
+                        "Ár_num": price_num,
+                        "Km": km,
+                        "Év": year,
+                        "Üzemanyag": fuel,
+                        "Helyszín": location,
+                        "Link": link,
+                        "Pontszám": rating
                     })
 
                     if not price_num:
@@ -178,16 +259,17 @@ def run_scraper():
 
         browser.close()
 
-        # Átlag ár számítás
-        valid_prices = [c["price"] for c in cars if c["price"]]
+        # 🔥 Átlag ár számítás
+        valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
         avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
+        # 🔥 Pontszám számítás
         for c in cars:
-            if c["price"] and avg_price:
-                diff = (avg_price - c["price"]) / avg_price * 100
-                c["rating"] = round(diff)
+            if c.get("Ár_num") and avg_price:
+                diff = (avg_price - c["Ár_num"]) / avg_price * 100
+                c["Pontszám"] = round(diff)
             else:
-                c["rating"] = None
+                c["Pontszám"] = None
 
     # rendezés
     cars.sort(key=lambda x: x.get("price") or 999999)
@@ -201,7 +283,11 @@ def run_scraper():
     filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
     save_to_excel(cars, filename)
 
-    return cars
+    send_email(
+        cars,
+        filename,
+        client_email="inczearon@gmail.com"  # ide amit akarsz ügyfél mail címe
+    )
 
 
 if __name__ == "__main__":
