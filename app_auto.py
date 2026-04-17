@@ -448,6 +448,8 @@ import time, re
 from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 
+print("ELINDULT A SCRIPT")
+
 def extract_price(text):
     if not text:
         return None
@@ -556,3 +558,6 @@ def run_scraper():
         print(car)
 
     return cars
+
+    if __name__ == "__main__":
+        run_scraper()
