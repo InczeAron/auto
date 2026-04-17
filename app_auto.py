@@ -5,6 +5,8 @@ import time, re, smtplib
 from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 from email.message import EmailMessage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 
 def extract_price(text):
@@ -103,7 +105,7 @@ def send_email(cars, excel_path, client_email=None):
         )
 
     # küldés
-    with smtplib.SMTP_SSL("mail.aronsoft.hu", 465) as smtp:
+    with smtplib.SMTP("smtp.forpsi.com", 587) as smtp:
         smtp.login(sender, password)
         smtp.send_message(msg)
 
