@@ -39,8 +39,8 @@ def run_scraper():
 
     brand = "bmw"
     model_slug = "3-series-(all)"
-    year_from = 2020
-    year_to = 2024
+    year_from = 2024
+    year_to = 2026
     country = "D"
 
     cars = []
@@ -125,11 +125,30 @@ def run_scraper():
                         link = "https://www.autoscout24.com" + link
 
                     cars.append({
-                        "Cím": title,
-                        "Ár": price_text,
-                        "Ár_num": price_num,
-                        "Link": link
+                        "title": title,
+                        "price": price_num,
+                        "price_text": price_text,
+                        "km": None,
+                        "year": None,
+                        "fuel": None,
+                        "location": "",
+                        "link": link
                     })
+
+                    details = article.locator("span").all()
+
+                    for d in details:
+                        txt = d.inner_text(timeout=500).strip().lower()
+
+                        if "km" in txt:
+                            km = re.sub(r"[^\d]", "", txt)
+                            cars[-1]["km"] = int(km) if km else None
+
+                        elif re.search(r"\d{2}/\d{4}", txt):
+                            cars[-1]["year"] = txt
+
+                        elif "diesel" in txt or "benzin" in txt or "gasoline" in txt:
+                            cars[-1]["fuel"] = txt
 
                 except:
                     continue
@@ -137,6 +156,17 @@ def run_scraper():
             time.sleep(2)  # 🔥 ne pörögjön túl gyorsan
 
         browser.close()
+
+        # Átlag ár számítás
+        valid_prices = [c["price"] for c in cars if c["price"]]
+        avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
+
+        for c in cars:
+            if c["price"] and avg_price:
+                diff = (avg_price - c["price"]) / avg_price * 100
+                c["rating"] = round(diff)
+            else:
+                c["rating"] = None
 
     # rendezés
     cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
