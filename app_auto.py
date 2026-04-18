@@ -1,12 +1,40 @@
 
     #----------------------------- új verzió tisztán chat gpt-től --------------------
 
-import time, re, smtplib
+import time, re, smtplib, os
 from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+def send_email(subject, body, to_email, attachment=None):
+    sender = os.environ.get("EMAIL_USER")
+    password = os.environ.get("EMAIL_PASS")
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    # Excel csatolmány
+    if attachment:
+        with open(attachment, "rb") as f:
+            msg.add_attachment(
+                f.read(),
+                maintype="application",
+                subtype="octet-stream",
+                filename=attachment
+            )
+
+    # Gmail SMTP
+    with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+        smtp.starttls()
+        smtp.login(sender, password)
+        smtp.send_message(msg)
+
+    print(f"📧 Email elküldve: {to_email}")
 
 
 def extract_price(text):
@@ -52,80 +80,45 @@ def save_to_excel(cars, filename):
     wb.save(filename)
     print(f"Excel mentve: {filename}")
 
-def generate_html(cars):
-    html = """
-    <h2>🚗 TOP autó ajánlatok</h2>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse;">
-        <tr style="background:#2c3e50; color:white;">
-            <th>#</th>
-            <th>Cím</th>
-            <th>Ár</th>
-            <th>Helyszín</th>
-            <th>Link</th>
-            <th>Értékelés</th>
-        </tr>
-    """
+def build_email_text(cars):
+    text = "TOP autók:\n\n"
 
-    for c in cars[:20]:  # TOP 20
-        html += f"""
-        <tr>
-            <td>{c.get("Sorszám")}</td>
-            <td>{c.get("Cím")}</td>
-            <td>{c.get("Ár")}</td>
-            <td>{c.get("Helyszín")}</td>
-            <td><a href="{c.get("Link")}">Open</a></td>
-            <td style="color:green;">{c.get("Pontszám")}% cheaper</td>
-        </tr>
-        """
+    for car in cars[:10]:
+        text += f"{car['Sorszám']}. {car['Cím']}\n"
+        text += f"Ár: {car['Ár']}\n"
+        text += f"Link: {car['Link']}\n"
+        text += f"Pontszám: {car['Pontszám']}%\n"
+        text += "-" * 30 + "\n"
 
-    html += "</table>"
-    return html    
+    return text  
 
-def send_email(cars, excel_path, client_email=None):
-    sender = "aronincze@aronsoft.hu"
-    password = "d.mh4pTXp8"  # ⚠️ majd env-be rakjuk!
-
-    html = generate_html(cars)
+def send_email(subject, body, to_email, attachment=None):
+    sender = os.environ.get("EMAIL_USER")
+    password = os.environ.get("EMAIL_PASS")
 
     msg = EmailMessage()
-    msg["Subject"] = "🚗 AutoScout Jelentés"
+    msg["Subject"] = subject
     msg["From"] = sender
-    msg["To"] = sender  # te kapod
+    msg["To"] = to_email
+    msg.set_content(body)
 
-    msg.set_content("HTML szükséges")
-    msg.add_alternative(html, subtype="html")
+    # Excel csatolmány
+    if attachment:
+        with open(attachment, "rb") as f:
+            msg.add_attachment(
+                f.read(),
+                maintype="application",
+                subtype="octet-stream",
+                filename=attachment
+            )
 
-    # 📎 Excel csatolás
-    with open(excel_path, "rb") as f:
-        msg.add_attachment(
-            f.read(),
-            maintype="application",
-            subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=excel_path
-        )
-
-    # küldés
-    with smtplib.SMTP("smtp.forpsi.com", 587) as smtp:
+    # Gmail SMTP
+    with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+        smtp.starttls()
         smtp.login(sender, password)
         smtp.send_message(msg)
 
-    print("📧 Saját email elküldve")
-
-    # 👤 ÜGYFÉL EMAIL (csak lista)
-    if client_email:
-        msg2 = EmailMessage()
-        msg2["Subject"] = "🚗 Új autó ajánlatok"
-        msg2["From"] = sender
-        msg2["To"] = client_email
-
-        msg2.set_content("HTML szükséges")
-        msg2.add_alternative(html, subtype="html")
-
-        with smtplib.SMTP_SSL("mail.aronsoft.hu", 465) as smtp:
-            smtp.login(sender, password)
-            smtp.send_message(msg2)
-
-        print("📧 Ügyfél email elküldve")
+    print(f"📧 Email elküldve: {to_email}")
 
 def run_scraper():
     print("🚀 SCRAPER START")
@@ -285,11 +278,34 @@ def run_scraper():
     filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
     save_to_excel(cars, filename)
 
+    # email szöveg
+    email_text = build_email_text(cars)
+
+    # saját email (excel + lista)
     send_email(
-        cars,
-        filename,
-        client_email="inczearon@gmail.com"  # ide amit akarsz ügyfél mail címe
+        subject="🚗 AutoScout lista",
+        body=email_text,
+        to_email="aronincze@aronsoft.hu",
+        attachment=filename
     )
+
+    # ügyfél email (csak lista)
+    client_email = "inczearon@gmail.com"  # ide írd
+    send_email(
+        subject="🚗 Ajánlott autók",
+        body=email_text,
+        to_email=client_email
+    )
+
+    try:
+        run_scraper()
+    except Exception as e:
+        send_email(
+            subject="❌ SCRAPER HIBA",
+            body=str(e),
+            to_email="aronincze@aronsoft.hu"
+        )
+        raise
 
 
 if __name__ == "__main__":
