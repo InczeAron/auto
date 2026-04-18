@@ -28,6 +28,9 @@ jobs:
 
       - name: Run scraper
         run: python app_auto.py
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
 
       - name: Upload Excel
         uses: actions/upload-artifact@v4
