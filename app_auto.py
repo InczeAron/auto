@@ -1,12 +1,26 @@
 
     #----------------------------- új verzió tisztán chat gpt-től --------------------
 
-import time, re, smtplib, os
+import time, re, smtplib, os, json
 from playwright.sync_api import sync_playwright
 from openpyxl import Workbook
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+SEEN_FILE = "seen_cars.json"
+
+
+def load_seen():
+    if not os.path.exists(SEEN_FILE):
+        return set()
+    with open(SEEN_FILE, "r") as f:
+        return set(json.load(f))
+
+
+def save_seen(seen):
+    with open(SEEN_FILE, "w") as f:
+        json.dump(list(seen), f)
 
 def send_email(subject, body, to_email, attachment=None):
     sender = os.environ.get("EMAIL_USER")
@@ -80,19 +94,55 @@ def save_to_excel(cars, filename):
     wb.save(filename)
     print(f"Excel mentve: {filename}")
 
-def build_email_text(cars):
-    text = "TOP autók:\n\n"
+def build_email_html(cars):
+    html = """
+    <html>
+    <body>
+    <h2>🚗 Új autók</h2>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-family: Arial;">
+        <tr style="background-color:#2f4f6f; color:white;">
+            <th>#</th>
+            <th>Cím</th>
+            <th>Ár</th>
+            <th>Km</th>
+            <th>Év</th>
+            <th>Link</th>
+            <th>Deal</th>
+        </tr>
+    """
+    
+    for car in cars:
+        rating = car.get("Pontszám") or 0
 
-    for car in cars[:10]:
-        text += f"{car['Sorszám']}. {car['Cím']}\n"
-        text += f"Ár: {car['Ár']}\n"
-        text += f"Link: {car['Link']}\n"
-        text += f"Pontszám: {car['Pontszám']}%\n"
-        text += "-" * 30 + "\n"
+        # szín
+        if rating > 0:
+            color = "green"
+            text = f"{rating}% olcsóbb"
+        else:
+            color = "red"
+            text = f"{rating}% drágább"
 
-    return text  
+        html += f"""
+        <tr>
+            <td>{car.get("Sorszám")}</td>
+            <td>{car.get("Cím")}</td>
+            <td>{car.get("Ár")}</td>
+            <td>{car.get("km") or '-'}</td>
+            <td>{car.get("year") or '-'}</td>
+            <td><a href="{car.get("Link")}">Open</a></td>
+            <td style="color:{color}; font-weight:bold;">{text}</td>
+        </tr>
+        """
 
-def send_email(subject, body, to_email, attachment=None):
+    html += """
+    </table>
+    </body>
+    </html>
+    """
+
+    return html 
+
+def send_email(subject, body, to_email, attachment=None, html=False):
     sender = os.environ.get("EMAIL_USER")
     password = os.environ.get("EMAIL_PASS")
 
@@ -100,9 +150,12 @@ def send_email(subject, body, to_email, attachment=None):
     msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = to_email
-    msg.set_content(body)
 
-    # Excel csatolmány
+    if html:
+        msg.add_alternative(body, subtype='html')
+    else:
+        msg.set_content(body)
+
     if attachment:
         with open(attachment, "rb") as f:
             msg.add_attachment(
@@ -112,13 +165,10 @@ def send_email(subject, body, to_email, attachment=None):
                 filename=attachment
             )
 
-    # Gmail SMTP
     with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
         smtp.starttls()
         smtp.login(sender, password)
         smtp.send_message(msg)
-
-    print(f"📧 Email elküldve: {to_email}")
 
 def run_scraper():
     print("🚀 SCRAPER START")
@@ -276,27 +326,62 @@ def run_scraper():
 
     # 🔥 Excel mentés
     filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
-    save_to_excel(cars, filename)
+    save_to_excel(new_cars, filename)
 
     # email szöveg
-    email_text = build_email_text(cars)
+    #if not new_cars:
+     #   print("Nincs új autó")
+      #  return
 
-    # saját email (excel + lista)
+    
+
+    seen = load_seen()
+
+    new_cars = []
+    for car in cars:
+        link = car.get("Link")
+        if link and link not in seen:
+            new_cars.append(car)
+            seen.add(link)
+
+    # 🔥 csak új autók
+    seen = load_seen()
+
+    new_cars = []
+    for car in cars:
+        link = car.get("Link")
+
+        if not link:
+            continue
+
+        # 🔥 ITT használod
+        car_id = link.split("/")[-1].split("?")[0]
+
+        if car_id not in seen:
+            new_cars.append(car)
+            seen.add(car_id)
+
+        save_seen(seen)
+
+    # ❗ ha nincs új → ne küldj semmit
+    if not new_cars:
+        print("Nincs új autó")
+        return
+
+    # 🔥 Excel mentés (CSAK új!)
+    filename = "new_cars.xlsx"
+    save_to_excel(new_cars, filename)
+
+    # 🔥 HTML email
+    email_html = build_email_html(new_cars)
+
     send_email(
-        subject="🚗 AutoScout lista",
-        body=email_text,
+        subject="🚗 Új autók (AutoScout)",
+        body=email_html,
         to_email="aronincze@aronsoft.hu",
-        attachment=filename
+        html=True
     )
-
-    # ügyfél email (csak lista)
-    client_email = "inczearon@gmail.com"  # ide írd
-    send_email(
-        subject="🚗 Ajánlott autók",
-        body=email_text,
-        to_email=client_email
-    )
-
+if __name__ == "__main__":
     try:
         run_scraper()
     except Exception as e:
@@ -305,8 +390,3 @@ def run_scraper():
             body=str(e),
             to_email="aronincze@aronsoft.hu"
         )
-        raise
-
-
-if __name__ == "__main__":
-    run_scraper()
