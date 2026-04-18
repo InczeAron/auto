@@ -322,18 +322,7 @@ def run_scraper():
     print(f"\n🎯 Talált autók: {len(cars)}")
 
     for car in cars[:5]:
-        print(car)
-
-    # 🔥 Excel mentés
-    filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
-    save_to_excel(new_cars, filename)
-
-    # email szöveg
-    #if not new_cars:
-     #   print("Nincs új autó")
-      #  return
-
-    
+        print(car)   
 
     seen = load_seen()
 
@@ -367,6 +356,10 @@ def run_scraper():
     if not new_cars:
         print("Nincs új autó")
         return
+    
+    # 🔥 Excel mentés
+    #filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
+    #save_to_excel(new_cars, filename) 
 
     # 🔥 Excel mentés (CSAK új!)
     filename = "new_cars.xlsx"
