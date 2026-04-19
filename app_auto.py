@@ -403,7 +403,7 @@ def run_scraper():
     send_email(
         subject="🚗 Új autók (AutoScout)",
         body=email_html,
-        to_email="aronincze@aronsoft.hu",
+        to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"],
         html=True,
         attachment=filename
     )
