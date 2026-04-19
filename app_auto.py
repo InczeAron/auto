@@ -72,7 +72,7 @@ def save_to_excel(cars, filename):
     ws = wb.active
     ws.title = "AutoScout"
 
-    headers = ["#", "Cím", "Ár", "Km", "Év", "Link", "Deal"]
+    headers = ["#", "Cím", "Ár", "Km", "Év", "Üzemanyag", "Helyszín", "Link", "Deal"]
 
     ws.append(headers)
 
@@ -103,6 +103,8 @@ def save_to_excel(cars, filename):
             car.get("Ár"),
             car.get("km") or "-",
             car.get("year") or "-",
+            car.get("fuel") or "-",
+            car.get("Helyszín") or "-",
             "Open",
             deal_text
         ])
