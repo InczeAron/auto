@@ -112,12 +112,12 @@ def save_to_excel(cars, filename):
         row = ws.max_row
 
         # 🔗 link
-        link_cell = ws.cell(row=row, column=6)
+        link_cell = ws.cell(row=row, column=8)
         link_cell.hyperlink = car.get("Link")
         link_cell.font = Font(color="0000FF", underline="single")
 
         # 🎯 deal színezés
-        deal_cell = ws.cell(row=row, column=7)
+        deal_cell = ws.cell(row=row, column=9)
         deal_cell.font = Font(color=color, bold=True)
 
     # 🔥 oszlopszélesség
@@ -330,6 +330,13 @@ def run_scraper():
 
                         elif "diesel" in txt or "benzin" in txt or "gasoline" in txt:
                             cars[-1]["fuel"] = txt
+
+                     # 🔥 HELYSZÍN KINYERÉS
+                    try:
+                        loc = article.locator("[class*='Location'], [class*='location'], [class*='seller']").first.inner_text(timeout=500)
+                        cars[-1]["Helyszín"] = loc.strip()
+                    except:
+                        cars[-1]["Helyszín"] = ""
 
                 except:
                     continue
