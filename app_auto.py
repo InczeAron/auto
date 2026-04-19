@@ -358,15 +358,6 @@ def run_scraper():
     for car in cars[:5]:
         print(car)   
 
-    seen = load_seen()
-
-    new_cars = []
-    for car in cars:
-        link = car.get("Link")
-        if link and link not in seen:
-            new_cars.append(car)
-            seen.add(link)
-
     # 🔥 csak új autók
     seen = load_seen()
 
