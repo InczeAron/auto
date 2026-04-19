@@ -384,7 +384,7 @@ def run_scraper():
             new_cars.append(car)
             seen.add(car_id)
 
-        save_seen(seen)
+    save_seen(seen)
 
     # ❗ ha nincs új → ne küldj semmit
     if not new_cars:
@@ -406,8 +406,10 @@ def run_scraper():
         subject="🚗 Új autók (AutoScout)",
         body=email_html,
         to_email="aronincze@aronsoft.hu",
-        html=True
+        html=True,
+        attachment=filename
     )
+
 if __name__ == "__main__":
     try:
         run_scraper()
