@@ -3,7 +3,6 @@
 
 import time, re, smtplib, os, json
 from playwright.sync_api import sync_playwright
-from openpyxl import Workbook
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -67,29 +66,62 @@ def extract_price(text):
 
 def save_to_excel(cars, filename):
     from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
 
     wb = Workbook()
     ws = wb.active
+    ws.title = "AutoScout"
 
-    # ✅ fejléc
-    ws.append(["#", "Cím", "Ár", "Km", "Év", "Üzemanyag", "Helyszín", "Link", "Pontszám"])
+    headers = ["#", "Cím", "Ár", "Km", "Év", "Link", "Deal"]
 
+    ws.append(headers)
+
+    # 🔥 fejléc stílus
+    header_fill = PatternFill(start_color="2F4F6F", end_color="2F4F6F", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+
+    for col in range(1, len(headers)+1):
+        cell = ws.cell(row=1, column=col)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    # 🔥 adatok
     for car in cars:
+        rating = car.get("Pontszám") or 0
+
+        if rating > 0:
+            deal_text = f"{rating}% olcsóbb"
+            color = "008000"  # zöld
+        else:
+            deal_text = f"{rating}% drágább"
+            color = "FF0000"  # piros
+
         ws.append([
             car.get("Sorszám"),
             car.get("Cím"),
             car.get("Ár"),
-            car.get("Km"),
-            car.get("Év"),
-            car.get("Üzemanyag"),
-            car.get("Helyszín"),
+            car.get("km") or "-",
+            car.get("year") or "-",
             "Open",
-            car.get("Pontszám")
+            deal_text
         ])
 
-        # ✅ kattintható link
         row = ws.max_row
-        ws.cell(row=row, column=8).hyperlink = car.get("Link")
+
+        # 🔗 link
+        link_cell = ws.cell(row=row, column=6)
+        link_cell.hyperlink = car.get("Link")
+        link_cell.font = Font(color="0000FF", underline="single")
+
+        # 🎯 deal színezés
+        deal_cell = ws.cell(row=row, column=7)
+        deal_cell.font = Font(color=color, bold=True)
+
+    # 🔥 oszlopszélesség
+    widths = [5, 50, 15, 10, 10, 10, 15]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64+i)].width = w
 
     wb.save(filename)
     print(f"Excel mentve: {filename}")
@@ -317,7 +349,7 @@ def run_scraper():
                 c["Pontszám"] = None
 
     # rendezés
-    cars.sort(key=lambda x: x.get("price") or 999999)
+    cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
 
     print(f"\n🎯 Talált autók: {len(cars)}")
 
