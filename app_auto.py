@@ -362,7 +362,7 @@ def run_scraper():
     #save_to_excel(new_cars, filename) 
 
     # 🔥 Excel mentés (CSAK új!)
-    filename = "new_cars.xlsx"
+    filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
     save_to_excel(new_cars, filename)
 
     # 🔥 HTML email
