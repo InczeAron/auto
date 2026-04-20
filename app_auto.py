@@ -11,6 +11,8 @@ from email.mime.text import MIMEText
 def get_db_connection():
     return psycopg2.connect(os.environ.get("DATABASE_URL"))
 
+print("DB URL:", os.environ.get("DATABASE_URL"))
+
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
