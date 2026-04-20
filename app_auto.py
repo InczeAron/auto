@@ -1,25 +1,84 @@
 
     #----------------------------- új verzió tisztán chat gpt-től --------------------
 
-import time, re, smtplib, os, json
+import time, re, smtplib, os, psycopg2
 from playwright.sync_api import sync_playwright
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-SEEN_FILE = "seen_cars.json"
 
+def get_db_connection():
+    return psycopg2.connect(os.environ.get("DATABASE_URL"))
 
-def load_seen():
-    if not os.path.exists(SEEN_FILE):
-        return set()
-    with open(SEEN_FILE, "r") as f:
-        return set(json.load(f))
+def init_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
 
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS sent_cars (
+        id SERIAL PRIMARY KEY,
+        dealer_id TEXT,
+        car_id TEXT,
+        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
 
-def save_seen(seen):
-    with open(SEEN_FILE, "w") as f:
-        json.dump(list(seen), f)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def load_seen(dealer_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT car_id FROM sent_cars WHERE dealer_id = %s",
+        (dealer_id,)
+    )
+
+    seen = {row[0] for row in cur.fetchall()}
+
+    cur.close()
+    conn.close()
+    return seen
+
+def save_seen(dealer_id, car_ids):
+    if not car_ids:
+        return
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    for car_id in car_ids:
+        cur.execute(
+            "INSERT INTO sent_cars (dealer_id, car_id) VALUES (%s, %s)",
+            (dealer_id, car_id)
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+"""dealer_id = "bmw_dealer_1"
+
+seen = load_seen(dealer_id)
+
+new_cars = []
+new_ids = []
+
+for car in cars:
+    link = car.get("Link")
+
+    if not link:
+        continue
+
+    car_id = link.split("/")[-1].split("?")[0]
+
+    if car_id not in seen:
+        new_cars.append(car)
+        new_ids.append(car_id)"""
+
 
 def send_email(subject, body, to_email, attachment=None):
     sender = os.environ.get("EMAIL_USER")
@@ -362,52 +421,57 @@ def run_scraper():
 
     print(f"\n🎯 Talált autók: {len(cars)}")
 
-    for car in cars[:5]:
-        print(car)   
+    print(f"Talált autók száma: {len(cars)}")
 
-    # 🔥 csak új autók
-    seen = load_seen()
+    # 🔥 INNENTŐL jön a DB + email logika
+    dealer_id = "bmw_dealer_2020-24_bmw3_DE"
+
+    seen = load_seen(dealer_id)
 
     new_cars = []
+    new_ids = []
+
     for car in cars:
         link = car.get("Link")
 
         if not link:
             continue
 
-        # 🔥 ITT használod
         car_id = link.split("/")[-1].split("?")[0]
 
         if car_id not in seen:
             new_cars.append(car)
-            seen.add(car_id)
+            new_ids.append(car_id)
 
-    save_seen(seen)
-
-    # ❗ ha nincs új → ne küldj semmit
     if not new_cars:
         print("Nincs új autó")
         return
-    
-    # 🔥 Excel mentés
-    #filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
-    #save_to_excel(new_cars, filename) 
 
-    # 🔥 Excel mentés (CSAK új!)
+    # rendezés
+    new_cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
+
+    # Excel
     filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
     save_to_excel(new_cars, filename)
 
-    # 🔥 HTML email
+    # HTML email
     email_html = build_email_html(new_cars)
 
     send_email(
-        subject="🚗 Új autók (AutoScout)",
+        subject=f"🚗 {len(new_cars)} új autó (AutoScout)",
         body=email_html,
         to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"],
         html=True,
         attachment=filename
     )
 
+    # DB mentés
+    save_seen(dealer_id, new_ids)
+
+    for car in cars[:5]:
+        print(car)   
+
+    
 if __name__ == "__main__":
     try:
         run_scraper()
