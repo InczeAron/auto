@@ -268,13 +268,36 @@ def send_email(subject, body, to_email, attachment=None, html=False):
 def run_scraper():
     print("🚀 SCRAPER START")
 
-    brand = "bmw"
-    model_slug = "3-series-(all)"
-    year_from = 2024
-    year_to = 2026
-    country = "D"
+    searches = [
+        {
+            "dealer_id": "bmw_3_de_2024_2026",
+            "brand": "bmw",
+            "model": "3-series-(all)",
+            "year_from": 2024,
+            "year_to": 2026,
+            "country": "D"
+        },
+        {
+            "dealer_id": "honda_jazz_at_2020_2026",
+            "brand": "honda",
+            "model": "jazz",
+            "year_from": 2020,
+            "year_to": 2026,
+            "country": "A"
+        }
+    ]
 
-    cars = []
+    for search in searches:
+        print(f"\n🔍 Keresés: {search['dealer_id']}")
+
+        brand = search["brand"]
+        model_slug = search["model"]
+        year_from = search["year_from"]
+        year_to = search["year_to"]
+        country = search["country"]
+        dealer_id = search["dealer_id"]
+
+        cars = []  # 🔥 MINDEN kereséshez új lista
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
