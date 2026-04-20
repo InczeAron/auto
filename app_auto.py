@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 
 
 def get_db_connection():
-    return psycopg2.connect(os.environ.get("DATABASE_URL"))
+    return psycopg2.connect(os.environ.get("DATABASE_URL"), sslmode="require")
 
 print("DB URL:", os.environ.get("DATABASE_URL"))
 
