@@ -362,9 +362,9 @@ def run_scraper():
                         link = "https://www.autoscout24.com" + link
 
                     cars.append({
-                        "Sorszám": len(cars) + 1,
-                        "Cím": title,
-                        "Ár": f"{price_num:,} €".replace(",", ".") if price_num else price_text,
+                        "Sorszám - N.o.": len(cars) + 1,
+                        "Cím - Address": title,
+                        "Ár - Price": f"{price_num:,} €".replace(",", ".") if price_num else price_text,
                         "Ár_num": price_num,
                         "Km": km,
                         "Év": year,
@@ -395,7 +395,7 @@ def run_scraper():
                      # 🔥 HELYSZÍN KINYERÉS
                     try:
                         loc = article.locator("[class*='Location'], [class*='location'], [class*='seller']").first.inner_text(timeout=500)
-                        cars[-1]["Helyszín"] = loc.strip()
+                        cars[-1]["Helyszín - Location"] = loc.strip()
                     except:
                         cars[-1]["Helyszín"] = ""
 
@@ -447,10 +447,15 @@ def run_scraper():
 
     if not new_cars:
         print("Nincs új autó")
+        send_email(
+            subject="🚗 AutoScout – nincs új autó - not a new car",
+            body="A mai futás során nem találtunk új hirdetéseket.",
+            to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"]
+        )
         return
 
     # rendezés
-    new_cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
+    new_cars.sort(key=lambda x: x.get("Pontszám - Score") or -999, reverse=True)
 
     # Excel
     filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
@@ -460,7 +465,7 @@ def run_scraper():
     email_html = build_email_html(new_cars)
 
     send_email(
-        subject=f"🚗 {len(new_cars)} új autó (AutoScout)",
+        subject=f"🚗 {len(new_cars)} új autó - new car (AutoScout)",
         body=email_html,
         to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"],
         html=True,
