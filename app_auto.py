@@ -449,7 +449,7 @@ def run_scraper():
     print(f"Talált autók száma: {len(cars)}")
 
     # 🔥 INNENTŐL jön a DB + email logika
-    dealer_id = "bmw_dealer_2020-24_bmw3_DE"
+    #dealer_id = "bmw_dealer_2020-24_bmw3_DE"
 
     seen = load_seen(dealer_id)
 
