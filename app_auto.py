@@ -297,25 +297,31 @@ def run_scraper():
     print("🚀 SCRAPER START")
     init_db()
 
-    # ── Dealer csoportok ──────────────────────────────────────────
-    # Minden dealerhez: dealer_id, email lista, és searches lista
     dealers = [
         {
             "dealer_id": "dealer1",
             "emails": ["aronincze@aronsoft.hu", "inczearon@gmail.com"],
             "searches": [
                 {"brand": "bmw",   "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
-                {"brand": "honda", "model": "jazz",            "year_from": 2020, "year_to": 2026, "country": "A"},
+                {"brand": "honda", "model": "jazz",           "year_from": 2020, "year_to": 2026, "country": "A"},
             ]
         },
         {
             "dealer_id": "dealer2",
             "emails": ["aronincze@aronsoft.hu", "inczearon@gmail.com"],
             "searches": [
-                {"brand": "bmw",       "model": "x1",           "year_from": 2020, "year_to": 2026, "country": "D"},
-                {"brand": "volkswagen","model": "golf",          "year_from": 2024, "year_to": 2026, "country": "D"},
+                {"brand": "bmw",        "model": "x1",   "year_from": 2020, "year_to": 2026, "country": "D"},
+                {"brand": "volkswagen", "model": "golf", "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
+    ]
+
+    from playwright.sync_api import sync_playwright
+    import random
+
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/119 Safari/537.36",
     ]
 
     with sync_playwright() as p:
@@ -324,28 +330,35 @@ def run_scraper():
             args=["--disable-blink-features=AutomationControlled",
                   "--no-sandbox", "--disable-dev-shm-usage"]
         )
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-            viewport={"width": 1280, "height": 800},
-            locale="de-DE"
-        )
-        context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
-        
 
         for dealer in dealers:
             dealer_id = dealer["dealer_id"]
             emails    = dealer["emails"]
+
             print(f"\n{'='*40}")
             print(f"🏢 Dealer: {dealer_id}")
 
+            # 🔥 ÚJ CONTEXT DEALERENKÉNT
+            context = browser.new_context(
+                user_agent=random.choice(USER_AGENTS),
+                viewport={"width": 1280, "height": 800},
+                locale="de-DE"
+            )
+
+            context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+            )
+
             seen = load_seen(dealer_id)
+
             all_new_cars = []
             all_new_ids  = []
 
             for search in dealer["searches"]:
-                page = context.new_page()
                 label = f"{search['brand']} {search['model']} ({search['country']})"
                 print(f"\n🔍 Keresés: {label}")
+
+                page = context.new_page()
 
                 cars = scrape_search(
                     page,
@@ -360,28 +373,35 @@ def run_scraper():
 
                 print(f"  🎯 Összesen: {len(cars)} autó")
 
-                # Átlagár + pontszám
+                if len(cars) == 0:
+                    print("  ⚠️ NINCS TALÁLAT (block vagy selector hiba)")
+
+                # Átlag + pontszám
                 valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
                 avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
+
                 for c in cars:
                     if c.get("Ár_num") and avg_price:
                         c["Pontszám"] = round((avg_price - c["Ár_num"]) / avg_price * 100)
 
-                # Csak új autók
+                # Új autók szűrése
                 for car in cars:
                     link = car.get("Link")
                     if not link:
                         continue
+
                     car_id = link.rstrip("/").split("/")[-1]
-                    # Csak érvényes UUID formátumú car_id-t fogadunk el
+
                     if not car_id or len(car_id) < 10:
                         continue
+
                     if car_id not in seen:
-                        seen.add(car_id)
+                        seen.add(car_id)  # 🔥 KRITIKUS FIX
                         car["Keresés"] = label
                         all_new_cars.append(car)
-                        all_new_ids.append(car_id)                        
-                        print(f"  DEBUG car_id: '{car_id}' | seen: {car_id in seen}")
+                        all_new_ids.append(car_id)
+
+            context.close()  # 🔥 FONTOS
 
             print(f"\n📬 Új autók száma ({dealer_id}): {len(all_new_cars)}")
 
@@ -393,10 +413,10 @@ def run_scraper():
                 )
                 continue
 
-            # Rendezés pontszám szerint
+            # Rendezés
             all_new_cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
 
-            # Sorszám újraszámozás
+            # Sorszám újra
             for i, c in enumerate(all_new_cars, 1):
                 c["Sorszám"] = i
 
@@ -404,12 +424,14 @@ def run_scraper():
             filename = f"{dealer_id}.xlsx"
             save_to_excel(all_new_cars, filename)
 
-            # Email
-            email_html = build_email_html(all_new_cars, dealer_id)
+            # DB mentés
             save_seen(dealer_id, all_new_ids)
 
+            # Email
+            email_html = build_email_html(all_new_cars, dealer_id)
+
             send_email(
-                subject=f"🚗 {len(all_new_cars)} új autó – {dealer_id} (AutoScout)",
+                subject=f"🚗 {len(all_new_cars)} új autó – {dealer_id}",
                 body=email_html,
                 to_email=emails,
                 html=True,
@@ -417,6 +439,7 @@ def run_scraper():
             )
 
         browser.close()
+
     print("\n✅ SCRAPER KÉSZ")
 
 
