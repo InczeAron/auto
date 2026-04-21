@@ -38,4 +38,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: autos
-          path: autoscout_results_2020-24_bmw3_DE.xlsx
+          path: "*.xlsx"
+          if-no-files-found: ignore
