@@ -62,27 +62,8 @@ def save_seen(dealer_id, car_ids):
     cur.close()
     conn.close()
 
-"""dealer_id = "bmw_dealer_1"
 
-seen = load_seen(dealer_id)
-
-new_cars = []
-new_ids = []
-
-for car in cars:
-    link = car.get("Link")
-
-    if not link:
-        continue
-
-    car_id = link.split("/")[-1].split("?")[0]
-
-    if car_id not in seen:
-        new_cars.append(car)
-        new_ids.append(car_id)"""
-
-
-def send_email(subject, body, to_email, attachment=None):
+def send_email(subject, body, to_email, attachment=None, html=False):
     sender = os.environ.get("EMAIL_USER")
     password = os.environ.get("EMAIL_PASS")
 
@@ -237,7 +218,7 @@ def build_email_html(cars):
 
     return html 
 
-def send_email(subject, body, to_email, attachment=None, html=False):
+"""def send_email(subject, body, to_email, attachment=None, html=False):
     sender = os.environ.get("EMAIL_USER")
     password = os.environ.get("EMAIL_PASS")
 
@@ -263,7 +244,7 @@ def send_email(subject, body, to_email, attachment=None, html=False):
     with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
         smtp.starttls()
         smtp.login(sender, password)
-        smtp.send_message(msg)
+        smtp.send_message(msg)"""
 
 def run_scraper():
     print("🚀 SCRAPER START")
@@ -299,15 +280,15 @@ def run_scraper():
 
         cars = []  # 🔥 MINDEN kereséshez új lista
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage"
-            ]
-        )
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage"
+                ]
+            )
 
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
@@ -385,9 +366,9 @@ def run_scraper():
                         link = "https://www.autoscout24.com" + link
 
                     cars.append({
-                        "Sorszám - N.o.": len(cars) + 1,
-                        "Cím - Address": title,
-                        "Ár - Price": f"{price_num:,} €".replace(",", ".") if price_num else price_text,
+                        "Sorszám": len(cars) + 1,
+                        "Cím": title,
+                        "Ár": f"{price_num:,} €".replace(",", ".") if price_num else price_text,
                         "Ár_num": price_num,
                         "Km": km,
                         "Év": year,
@@ -441,23 +422,20 @@ def run_scraper():
             else:
                 c["Pontszám"] = None
 
-    # rendezés
-    cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
+        # rendezés
+        cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
 
-    print(f"\n🎯 Talált autók: {len(cars)}")
+        print(f"\n🎯 Talált autók: {len(cars)}")
 
-    print(f"Talált autók száma: {len(cars)}")
+        print(f"Talált autók száma: {len(cars)}")
 
-    # 🔥 INNENTŐL jön a DB + email logika
-    #dealer_id = "bmw_dealer_2020-24_bmw3_DE"
+        seen = load_seen(dealer_id)
 
-    seen = load_seen(dealer_id)
+        new_cars = []
+        new_ids = []
 
-    new_cars = []
-    new_ids = []
-
-    for car in cars:
-        link = car.get("Link")
+        for car in cars:
+            link = car.get("Link")
 
         if not link:
             continue
@@ -468,35 +446,37 @@ def run_scraper():
             new_cars.append(car)
             new_ids.append(car_id)
 
-    if not new_cars:
-        print("Nincs új autó")
+        if not new_cars:
+            print("Nincs új autó")
+            send_email(
+                subject="🚗 AutoScout – nincs új autó - not a new car",
+                body="A mai futás során nem találtunk új hirdetéseket.",
+                to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"]
+            )
+            return
+
+        # rendezés
+        new_cars.sort(key=lambda x: x.get("Pontszám - Score") or -999, reverse=True)
+
+        # Excel
+        filename = f"{dealer_id}.xlsx"
+        save_to_excel(new_cars, filename)
+
+        # HTML email
+        email_html = build_email_html(new_cars)
+
+        # DB mentés
+        save_seen(dealer_id, new_ids)
+
         send_email(
-            subject="🚗 AutoScout – nincs új autó - not a new car",
-            body="A mai futás során nem találtunk új hirdetéseket.",
-            to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"]
+            subject=f"🚗 {len(new_cars)} új autó - new car (AutoScout)",
+            body=email_html,
+            to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"],
+            html=True,
+            attachment=filename
         )
-        return
 
-    # rendezés
-    new_cars.sort(key=lambda x: x.get("Pontszám - Score") or -999, reverse=True)
-
-    # Excel
-    filename = "autoscout_results_2020-24_bmw3_DE.xlsx"
-    save_to_excel(new_cars, filename)
-
-    # HTML email
-    email_html = build_email_html(new_cars)
-
-    send_email(
-        subject=f"🚗 {len(new_cars)} új autó - new car (AutoScout)",
-        body=email_html,
-        to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"],
-        html=True,
-        attachment=filename
-    )
-
-    # DB mentés
-    save_seen(dealer_id, new_ids)
+        
 
     for car in cars[:5]:
         print(car)   
