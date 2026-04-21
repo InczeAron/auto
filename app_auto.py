@@ -330,7 +330,7 @@ def run_scraper():
             locale="de-DE"
         )
         context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
-        page = context.new_page()
+        
 
         for dealer in dealers:
             dealer_id = dealer["dealer_id"]
@@ -343,6 +343,7 @@ def run_scraper():
             all_new_ids  = []
 
             for search in dealer["searches"]:
+                page = context.new_page()
                 label = f"{search['brand']} {search['model']} ({search['country']})"
                 print(f"\n🔍 Keresés: {label}")
 
@@ -354,6 +355,8 @@ def run_scraper():
                     search["year_to"],
                     search["country"]
                 )
+
+                page.close()
 
                 print(f"  🎯 Összesen: {len(cars)} autó")
 
@@ -374,9 +377,10 @@ def run_scraper():
                     if not car_id or len(car_id) < 10:
                         continue
                     if car_id not in seen:
+                        seen.add(car_id)
                         car["Keresés"] = label
                         all_new_cars.append(car)
-                        all_new_ids.append(car_id)
+                        all_new_ids.append(car_id)                        
                         print(f"  DEBUG car_id: '{car_id}' | seen: {car_id in seen}")
 
             print(f"\n📬 Új autók száma ({dealer_id}): {len(all_new_cars)}")
