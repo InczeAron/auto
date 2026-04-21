@@ -370,10 +370,14 @@ def run_scraper():
                     if not link:
                         continue
                     car_id = link.rstrip("/").split("/")[-1]
+                    # Csak érvényes UUID formátumú car_id-t fogadunk el
+                    if not car_id or len(car_id) < 10:
+                        continue
                     if car_id not in seen:
                         car["Keresés"] = label
                         all_new_cars.append(car)
                         all_new_ids.append(car_id)
+                        print(f"  DEBUG car_id: '{car_id}' | seen: {car_id in seen}")
 
             print(f"\n📬 Új autók száma ({dealer_id}): {len(all_new_cars)}")
 
