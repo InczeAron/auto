@@ -1,31 +1,25 @@
-
-    #----------------------------- új verzió tisztán chat gpt-től --------------------
-
 import time, re, smtplib, os, psycopg2
 from playwright.sync_api import sync_playwright
 from email.message import EmailMessage
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 
+# =========================
+# DATABASE
+# =========================
 def get_db_connection():
     return psycopg2.connect(os.environ.get("DATABASE_URL"), sslmode="require")
-
-print("DB URL:", os.environ.get("DATABASE_URL"))
 
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS sent_cars (
-        id SERIAL PRIMARY KEY,
-        dealer_id TEXT,
-        car_id TEXT,
-        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
+        CREATE TABLE IF NOT EXISTS sent_cars (
+            id SERIAL PRIMARY KEY,
+            dealer_id TEXT,
+            car_id TEXT,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
     """)
-
     conn.commit()
     cur.close()
     conn.close()
@@ -33,14 +27,8 @@ def init_db():
 def load_seen(dealer_id):
     conn = get_db_connection()
     cur = conn.cursor()
-
-    cur.execute(
-        "SELECT car_id FROM sent_cars WHERE dealer_id = %s",
-        (dealer_id,)
-    )
-
+    cur.execute("SELECT car_id FROM sent_cars WHERE dealer_id = %s", (dealer_id,))
     seen = {row[0] for row in cur.fetchall()}
-
     cur.close()
     conn.close()
     return seen
@@ -48,21 +36,21 @@ def load_seen(dealer_id):
 def save_seen(dealer_id, car_ids):
     if not car_ids:
         return
-
     conn = get_db_connection()
     cur = conn.cursor()
-
     for car_id in car_ids:
         cur.execute(
-            "INSERT INTO sent_cars (dealer_id, car_id) VALUES (%s, %s)",
+            "INSERT INTO sent_cars (dealer_id, car_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
             (dealer_id, car_id)
         )
-
     conn.commit()
     cur.close()
     conn.close()
 
 
+# =========================
+# EMAIL
+# =========================
 def send_email(subject, body, to_email, attachment=None, html=False):
     sender = os.environ.get("EMAIL_USER")
     password = os.environ.get("EMAIL_PASS")
@@ -70,42 +58,38 @@ def send_email(subject, body, to_email, attachment=None, html=False):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = sender
-    msg["To"] = to_email
-    msg.set_content(body)
 
-    # Excel csatolmány
-    if attachment:
+    # to_email lehet string vagy lista
+    if isinstance(to_email, list):
+        msg["To"] = ", ".join(to_email)
+    else:
+        msg["To"] = to_email
+
+    if html:
+        msg.add_alternative(body, subtype="html")
+    else:
+        msg.set_content(body)
+
+    if attachment and os.path.exists(attachment):
         with open(attachment, "rb") as f:
             msg.add_attachment(
                 f.read(),
                 maintype="application",
                 subtype="octet-stream",
-                filename=attachment
+                filename=os.path.basename(attachment)
             )
 
-    # Gmail SMTP
     with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
         smtp.starttls()
         smtp.login(sender, password)
         smtp.send_message(msg)
 
-    print(f"📧 Email elküldve: {to_email}")
+    print(f"📧 Email elküldve: {msg['To']}")
 
 
-def extract_price(text):
-    if not text:
-        return None
-    text = text.replace("\xa0", " ").strip()
-    match = re.search(r"\d{1,3}(?:[.,\s]\d{3})+", text)
-    if not match:
-        return None
-    number = re.sub(r"[^\d]", "", match.group(0))
-    if not number:
-        return None
-    value = int(number)
-    return value if 500 < value < 500000 else None
-
-
+# =========================
+# EXCEL
+# =========================
 def save_to_excel(cars, filename):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -115,379 +99,326 @@ def save_to_excel(cars, filename):
     ws.title = "AutoScout"
 
     headers = ["#", "Cím", "Ár", "Km", "Év", "Üzemanyag", "Helyszín", "Link", "Deal"]
-
-    ws.append(headers)
-
-    # 🔥 fejléc stílus
     header_fill = PatternFill(start_color="2F4F6F", end_color="2F4F6F", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
 
-    for col in range(1, len(headers)+1):
-        cell = ws.cell(row=1, column=col)
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
 
-    # 🔥 adatok
     for car in cars:
         rating = car.get("Pontszám") or 0
-
-        if rating > 0:
-            deal_text = f"{rating}% olcsóbb"
-            color = "008000"  # zöld
-        else:
-            deal_text = f"{rating}% drágább"
-            color = "FF0000"  # piros
+        deal_text = f"{abs(rating)}% olcsóbb" if rating > 0 else f"{abs(rating)}% drágább"
+        color = "008000" if rating > 0 else "FF0000"
 
         ws.append([
             car.get("Sorszám"),
             car.get("Cím"),
             car.get("Ár"),
-            car.get("km") or "-",
-            car.get("year") or "-",
-            car.get("fuel") or "-",
+            car.get("Km") or "-",
+            car.get("Év") or "-",
+            car.get("Üzemanyag") or "-",
             car.get("Helyszín") or "-",
             "Open",
             deal_text
         ])
 
         row = ws.max_row
-
-        # 🔗 link
         link_cell = ws.cell(row=row, column=8)
-        link_cell.hyperlink = car.get("Link")
+        link_cell.hyperlink = car.get("Link") or ""
         link_cell.font = Font(color="0000FF", underline="single")
 
-        # 🎯 deal színezés
         deal_cell = ws.cell(row=row, column=9)
         deal_cell.font = Font(color=color, bold=True)
 
-    # 🔥 oszlopszélesség
-    widths = [5, 50, 15, 10, 10, 10, 15]
+    widths = [5, 50, 15, 12, 12, 12, 20, 8, 15]
     for i, w in enumerate(widths, 1):
-        ws.column_dimensions[chr(64+i)].width = w
+        ws.column_dimensions[ws.cell(1, i).column_letter].width = w
 
     wb.save(filename)
-    print(f"Excel mentve: {filename}")
+    print(f"✅ Excel mentve: {filename}")
 
-def build_email_html(cars):
-    html = """
-    <html>
-    <body>
-    <h2>🚗 Új autók</h2>
-    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-family: Arial;">
-        <tr style="background-color:#2f4f6f; color:white;">
-            <th>#</th>
-            <th>Cím</th>
-            <th>Ár</th>
-            <th>Km</th>
-            <th>Év</th>
-            <th>Link</th>
-            <th>Deal</th>
+
+# =========================
+# HTML EMAIL
+# =========================
+def build_email_html(cars, search_label=""):
+    html = f"""
+    <html><body>
+    <h2>🚗 Új autók – {search_label}</h2>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Arial;">
+        <tr style="background-color:#2f4f6f;color:white;">
+            <th>#</th><th>Cím</th><th>Ár</th><th>Km</th><th>Év</th><th>Link</th><th>Deal</th>
         </tr>
     """
-    
     for car in cars:
         rating = car.get("Pontszám") or 0
-
-        # szín
-        if rating > 0:
-            color = "green"
-            text = f"{rating}% olcsóbb"
-        else:
-            color = "red"
-            text = f"{rating}% drágább"
-
+        color = "green" if rating > 0 else "red"
+        text = f"{abs(rating)}% olcsóbb" if rating > 0 else f"{abs(rating)}% drágább"
         html += f"""
         <tr>
             <td>{car.get("Sorszám")}</td>
             <td>{car.get("Cím")}</td>
             <td>{car.get("Ár")}</td>
-            <td>{car.get("km") or '-'}</td>
-            <td>{car.get("year") or '-'}</td>
+            <td>{car.get("Km") or '-'}</td>
+            <td>{car.get("Év") or '-'}</td>
             <td><a href="{car.get("Link")}">Open</a></td>
-            <td style="color:{color}; font-weight:bold;">{text}</td>
-        </tr>
-        """
+            <td style="color:{color};font-weight:bold;">{text}</td>
+        </tr>"""
+    html += "</table></body></html>"
+    return html
 
-    html += """
-    </table>
-    </body>
-    </html>
-    """
 
-    return html 
+# =========================
+# PRICE EXTRACT
+# =========================
+def extract_price(text):
+    if not text:
+        return None
+    text = text.replace("\xa0", " ").strip()
+    match = re.search(r"\d{1,3}(?:[.,\s]\d{3})+", text)
+    if not match:
+        match = re.search(r"\d+", text)
+    if not match:
+        return None
+    value = int(re.sub(r"[^\d]", "", match.group(0)))
+    return value if 500 < value < 500000 else None
 
-"""def send_email(subject, body, to_email, attachment=None, html=False):
-    sender = os.environ.get("EMAIL_USER")
-    password = os.environ.get("EMAIL_PASS")
 
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = to_email
+# =========================
+# SCRAPE ONE SEARCH
+# =========================
+def scrape_search(page, brand, model_slug, year_from, year_to, country):
+    cars = []
 
-    if html:
-        msg.add_alternative(body, subtype='html')
-    else:
-        msg.set_content(body)
+    for page_num in range(1, 4):
+        print(f"  📄 Oldal: {page_num}")
+        url = (f"https://www.autoscout24.com/lst/{brand}/{model_slug}"
+               f"?page={page_num}&fregfrom={year_from}&fregto={year_to}&cy={country}")
 
-    if attachment:
-        with open(attachment, "rb") as f:
-            msg.add_attachment(
-                f.read(),
-                maintype="application",
-                subtype="octet-stream",
-                filename=attachment
-            )
+        try:
+            page.goto(url, timeout=25000)
+        except Exception:
+            print("  ❌ Oldal nem tölt be")
+            break
 
-    with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
-        smtp.starttls()
-        smtp.login(sender, password)
-        smtp.send_message(msg)"""
+        html_len = len(page.content())
+        if html_len < 5000:
+            print("  ⛔ Valószínű CAPTCHA/block")
+            break
 
+        # Cookie
+        try:
+            btn = page.locator("button:has-text('Accept')").first
+            if btn.is_visible(timeout=2000):
+                btn.click()
+        except Exception:
+            pass
+
+        try:
+            page.wait_for_selector("article", timeout=5000)
+        except Exception:
+            pass
+
+        articles = page.locator("article").all()
+        if not articles:
+            print("  ⛔ Nincs találat")
+            break
+
+        print(f"  → {len(articles)} hirdetés")
+
+        for article in articles:
+            try:
+                title = article.locator("h2").first.inner_text(timeout=1000).strip()
+                price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000).strip()
+                price_num = extract_price(price_text)
+
+                link = ""
+                try:
+                    href = article.locator("a[href*='/offers/']").first.get_attribute("href", timeout=500)
+                    if href:
+                        link = "https://www.autoscout24.com" + href if href.startswith("/") else href
+                        link = link.split("?")[0]
+                except Exception:
+                    pass
+
+                km = None
+                year = ""
+                fuel = ""
+                location = ""
+
+                try:
+                    spans = article.locator("span").all()
+                    for d in spans:
+                        txt = d.inner_text(timeout=300).strip().lower()
+                        if "km" in txt and re.search(r"\d", txt):
+                            km_str = re.sub(r"[^\d]", "", txt)
+                            km = int(km_str) if km_str else None
+                        elif re.search(r"\d{2}/\d{4}", txt):
+                            year = txt
+                        elif any(f in txt for f in ["diesel", "benzin", "gasoline", "petrol", "electric", "hybrid"]):
+                            fuel = txt
+                except Exception:
+                    pass
+
+                try:
+                    loc = article.locator("[class*='Location'],[class*='location'],[class*='seller']").first.inner_text(timeout=500)
+                    location = loc.strip()
+                except Exception:
+                    pass
+
+                cars.append({
+                    "Sorszám": len(cars) + 1,
+                    "Cím":     title,
+                    "Ár":      f"{price_num:,} €".replace(",", ".") if price_num else price_text,
+                    "Ár_num":  price_num,
+                    "Km":      km,
+                    "Év":      year,
+                    "Üzemanyag": fuel,
+                    "Helyszín":  location,
+                    "Link":    link,
+                    "Pontszám": 0
+                })
+
+            except Exception:
+                continue
+
+        time.sleep(2)
+
+    return cars
+
+
+# =========================
+# MAIN
+# =========================
 def run_scraper():
     print("🚀 SCRAPER START")
+    init_db()
 
-    searches = [
+    # ── Dealer csoportok ──────────────────────────────────────────
+    # Minden dealerhez: dealer_id, email lista, és searches lista
+    dealers = [
         {
-            "dealer_id": "bmw_3_de_2024_2026",
-            "brand": "bmw",
-            "model": "3-series-(all)",
-            "year_from": 2024,
-            "year_to": 2026,
-            "country": "D"
+            "dealer_id": "dealer1",
+            "emails": ["aronincze@aronsoft.hu", "inczearon@gmail.com"],
+            "searches": [
+                {"brand": "bmw",   "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
+                {"brand": "honda", "model": "jazz",            "year_from": 2020, "year_to": 2026, "country": "A"},
+            ]
         },
         {
-            "dealer_id": "honda_jazz_at_2020_2026",
-            "brand": "honda",
-            "model": "jazz",
-            "year_from": 2020,
-            "year_to": 2026,
-            "country": "A"
-        }
+            "dealer_id": "dealer2",
+            "emails": ["aronincze@aronsoft.hu", "inczearon@gmail.com"],
+            "searches": [
+                {"brand": "bmw",       "model": "x1",           "year_from": 2020, "year_to": 2026, "country": "D"},
+                {"brand": "volkswagen","model": "golf",          "year_from": 2024, "year_to": 2026, "country": "D"},
+            ]
+        },
     ]
 
-    for search in searches:
-        print(f"\n🔍 Keresés: {search['dealer_id']}")
-
-        brand = search["brand"]
-        model_slug = search["model"]
-        year_from = search["year_from"]
-        year_to = search["year_to"]
-        country = search["country"]
-        dealer_id = search["dealer_id"]
-
-        cars = []  # 🔥 MINDEN kereséshez új lista
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage"
-                ]
-            )
-
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled",
+                  "--no-sandbox", "--disable-dev-shm-usage"]
+        )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
             viewport={"width": 1280, "height": 800},
             locale="de-DE"
         )
-
-        # 🔥 stealth hack
-        context.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        """)
-
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
         page = context.new_page()
 
-        for page_num in range(1, 4):  # max 3 oldal
-            print(f"\n📄 OLDAL: {page_num}")
+        for dealer in dealers:
+            dealer_id = dealer["dealer_id"]
+            emails    = dealer["emails"]
+            print(f"\n{'='*40}")
+            print(f"🏢 Dealer: {dealer_id}")
 
-            url = f"https://www.autoscout24.com/lst/{brand}/{model_slug}?page={page_num}&fregfrom={year_from}&fregto={year_to}&cy={country}"
+            seen = load_seen(dealer_id)
+            all_new_cars = []
+            all_new_ids  = []
 
-            try:
-                page.goto(url, timeout=20000)
-            except:
-                print("❌ Nem tölt be az oldal")
-                break
+            for search in dealer["searches"]:
+                label = f"{search['brand']} {search['model']} ({search['country']})"
+                print(f"\n🔍 Keresés: {label}")
 
-            # DEBUG
-            html_len = len(page.content())
-            print("HTML méret:", html_len)
+                cars = scrape_search(
+                    page,
+                    search["brand"],
+                    search["model"],
+                    search["year_from"],
+                    search["year_to"],
+                    search["country"]
+                )
 
-            if html_len < 5000:
-                print("⛔ VALÓSZÍNŰ BLOCK / CAPTCHA")
-                page.screenshot(path=f"debug_block_{page_num}.png")
-                break
+                print(f"  🎯 Összesen: {len(cars)} autó")
 
-            # cookie accept
-            try:
-                btn = page.locator("button:has-text('Accept')").first
-                if btn.is_visible(timeout=2000):
-                    btn.click()
-                    print("✅ Cookie OK")
-            except:
-                pass
+                # Átlagár + pontszám
+                valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
+                avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
+                for c in cars:
+                    if c.get("Ár_num") and avg_price:
+                        c["Pontszám"] = round((avg_price - c["Ár_num"]) / avg_price * 100)
 
-            try:
-                page.wait_for_selector("article", timeout=5000)
-            except:
-                print("⚠️ Nincs article → fallback")
-
-            articles = page.locator("article").all()
-
-            if not articles:
-                print("⛔ NINCS TALÁLAT → STOP")
-                break
-
-            print("Találatok:", len(articles))
-
-            for i, article in enumerate(articles):
-                if i > 30:  # limit
-                    break
-
-                year = ""
-                fuel = ""
-                location = ""
-                rating = 0
-                km = None
-
-                try:
-                    title = article.locator("h2").first.inner_text(timeout=1000)
-
-                    price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000)
-                    price_num = extract_price(price_text)
-
-                    link = article.locator("a[href*='/offers/']").first.get_attribute("href")
-                    if link and link.startswith("/"):
-                        link = "https://www.autoscout24.com" + link
-
-                    cars.append({
-                        "Sorszám": len(cars) + 1,
-                        "Cím": title,
-                        "Ár": f"{price_num:,} €".replace(",", ".") if price_num else price_text,
-                        "Ár_num": price_num,
-                        "Km": km,
-                        "Év": year,
-                        "Üzemanyag": fuel,
-                        "Helyszín": location,
-                        "Link": link,
-                        "Pontszám": rating
-                    })
-
-                    if not price_num:
+                # Csak új autók
+                for car in cars:
+                    link = car.get("Link")
+                    if not link:
                         continue
+                    car_id = link.rstrip("/").split("/")[-1]
+                    if car_id not in seen:
+                        car["Keresés"] = label
+                        all_new_cars.append(car)
+                        all_new_ids.append(car_id)
 
-                    details = article.locator("span").all()
+            print(f"\n📬 Új autók száma ({dealer_id}): {len(all_new_cars)}")
 
-                    for d in details:
-                        txt = d.inner_text(timeout=500).strip().lower()
+            if not all_new_cars:
+                send_email(
+                    subject=f"🚗 AutoScout – {dealer_id} – nincs új autó",
+                    body="A mai futás során nem találtunk új hirdetéseket.",
+                    to_email=emails
+                )
+                continue
 
-                        if "km" in txt:
-                            km = re.sub(r"[^\d]", "", txt)
-                            cars[-1]["km"] = int(km) if km else None
+            # Rendezés pontszám szerint
+            all_new_cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
 
-                        elif re.search(r"\d{2}/\d{4}", txt):
-                            cars[-1]["year"] = txt
+            # Sorszám újraszámozás
+            for i, c in enumerate(all_new_cars, 1):
+                c["Sorszám"] = i
 
-                        elif "diesel" in txt or "benzin" in txt or "gasoline" in txt:
-                            cars[-1]["fuel"] = txt
+            # Excel
+            filename = f"{dealer_id}.xlsx"
+            save_to_excel(all_new_cars, filename)
 
-                     # 🔥 HELYSZÍN KINYERÉS
-                    try:
-                        loc = article.locator("[class*='Location'], [class*='location'], [class*='seller']").first.inner_text(timeout=500)
-                        cars[-1]["Helyszín - Location"] = loc.strip()
-                    except:
-                        cars[-1]["Helyszín"] = ""
+            # Email
+            email_html = build_email_html(all_new_cars, dealer_id)
+            save_seen(dealer_id, all_new_ids)
 
-                except:
-                    continue
-
-            time.sleep(2)  # 🔥 ne pörögjön túl gyorsan
+            send_email(
+                subject=f"🚗 {len(all_new_cars)} új autó – {dealer_id} (AutoScout)",
+                body=email_html,
+                to_email=emails,
+                html=True,
+                attachment=filename
+            )
 
         browser.close()
+    print("\n✅ SCRAPER KÉSZ")
 
-        # 🔥 Átlag ár számítás
-        valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
-        avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
-        # 🔥 Pontszám számítás
-        for c in cars:
-            if c.get("Ár_num") and avg_price:
-                diff = (avg_price - c["Ár_num"]) / avg_price * 100
-                c["Pontszám"] = round(diff)
-            else:
-                c["Pontszám"] = None
-
-        # rendezés
-        cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
-
-        print(f"\n🎯 Talált autók: {len(cars)}")
-
-        print(f"Talált autók száma: {len(cars)}")
-
-        seen = load_seen(dealer_id)
-
-        new_cars = []
-        new_ids = []
-
-        for car in cars:
-            link = car.get("Link")
-
-        if not link:
-            continue
-
-        car_id = link.split("/")[-1].split("?")[0]
-
-        if car_id not in seen:
-            new_cars.append(car)
-            new_ids.append(car_id)
-
-        if not new_cars:
-            print("Nincs új autó")
-            send_email(
-                subject="🚗 AutoScout – nincs új autó - not a new car",
-                body="A mai futás során nem találtunk új hirdetéseket.",
-                to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"]
-            )
-            continue
-
-        # rendezés
-        new_cars.sort(key=lambda x: x.get("Pontszám - Score") or -999, reverse=True)
-
-        # Excel
-        filename = f"{dealer_id}.xlsx"
-        save_to_excel(new_cars, filename)
-
-        # HTML email
-        email_html = build_email_html(new_cars)
-
-        # DB mentés
-        save_seen(dealer_id, new_ids)
-
-        send_email(
-            subject=f"🚗 {len(new_cars)} új autó - new car (AutoScout)",
-            body=email_html,
-            to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"],
-            html=True,
-            attachment=filename
-        )
-
-        
-
-    for car in cars[:5]:
-        print(car)   
-
-    
 if __name__ == "__main__":
     try:
         run_scraper()
     except Exception as e:
+        import traceback
         send_email(
             subject="❌ SCRAPER HIBA",
-            body=str(e),
+            body=traceback.format_exc(),
             to_email="aronincze@aronsoft.hu"
         )
