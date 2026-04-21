@@ -433,7 +433,7 @@ def run_scraper():
                 c["Sorszám"] = i
 
             # Excel
-            filename = f"{dealer_id}.xlsx"
+            filename = f"{dealer_id}_{search['brand']}.xlsx" #f"{dealer_id}.xlsx"
             save_to_excel(all_new_cars, filename)
 
             # DB mentés
