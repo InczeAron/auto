@@ -453,7 +453,7 @@ def run_scraper():
                 body="A mai futás során nem találtunk új hirdetéseket.",
                 to_email=["aronincze@aronsoft.hu", "inczearon@gmail.com"]
             )
-            return
+            continue
 
         # rendezés
         new_cars.sort(key=lambda x: x.get("Pontszám - Score") or -999, reverse=True)
