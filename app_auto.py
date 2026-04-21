@@ -300,17 +300,29 @@ def run_scraper():
     dealers = [
         {
             "dealer_id": "dealer1",
-            "emails": ["aronincze@aronsoft.hu", "inczearon@gmail.com"],
+            "emails": ["aronincze@aronsoft.hu"],
             "searches": [
                 {"brand": "bmw",   "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
+            ]
+        },
+        {
+            "dealer_id": "dealer1",
+            "emails": ["aronincze@aronsoft.hu"],
+            "searches": [
                 {"brand": "honda", "model": "jazz",           "year_from": 2020, "year_to": 2026, "country": "A"},
             ]
         },
         {
             "dealer_id": "dealer2",
-            "emails": ["aronincze@aronsoft.hu", "inczearon@gmail.com"],
+            "emails": ["inczearon@gmail.com"],
             "searches": [
                 {"brand": "bmw",        "model": "x1",   "year_from": 2020, "year_to": 2026, "country": "D"},
+            ]
+        },
+        {
+            "dealer_id": "dealer2",
+            "emails": ["inczearon@gmail.com"],
+            "searches": [
                 {"brand": "volkswagen", "model": "golf", "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
