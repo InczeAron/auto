@@ -156,7 +156,7 @@ def build_email_html(cars, search_label=""):
     for car in cars:
         rating = car.get("Pontszám") or 0
         color = "green" if rating > 0 else "red"
-        text = f"{abs(rating)}% olcsóbb" if rating > 0 else f"{abs(rating)}% drágább"
+        text = f"{abs(rating)}% cheaper" if rating > 0 else f"{abs(rating)}% more expensive"
         html += f"""
         <tr>
             <td>{car.get("Sorszám")}</td>
