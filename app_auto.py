@@ -98,7 +98,7 @@ def save_to_excel(cars, filename):
     ws = wb.active
     ws.title = "AutoScout"
 
-    headers = ["#", "Cím", "Ár", "Km", "Év", "Üzemanyag", "Helyszín", "Link", "Deal"]
+    headers = ["#", "Title", "Price", "Mileage", "Year", "Fuel", "Location", "Link", "Deal"]
     header_fill = PatternFill(start_color="2F4F6F", end_color="2F4F6F", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
 
@@ -150,7 +150,7 @@ def build_email_html(cars, search_label=""):
     <h2>🚗 Új autók – {search_label}</h2>
     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Arial;">
         <tr style="background-color:#2f4f6f;color:white;">
-            <th>#</th><th>Cím</th><th>Ár</th><th>Km</th><th>Év</th><th>Link</th><th>Deal</th>
+            <th>#</th><th>Title</th><th>Price</th><th>Mileage</th><th>Year</th><th>Location</th><th>Link</th><th>Deal</th>
         </tr>
     """
     for car in cars:
@@ -164,6 +164,7 @@ def build_email_html(cars, search_label=""):
             <td>{car.get("Ár")}</td>
             <td>{car.get("Km") or '-'}</td>
             <td>{car.get("Év") or '-'}</td>
+            <td>{car.get("Helyszín") or '-'}</td>
             <td><a href="{car.get("Link")}">Open</a></td>
             <td style="color:{color};font-weight:bold;">{text}</td>
         </tr>"""
@@ -264,10 +265,14 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                     pass
 
                 try:
-                    loc = article.locator("[class*='Location'],[class*='location'],[class*='seller']").first.inner_text(timeout=500)
+                    loc = article.locator("[class*='Location'], [class*='location']").first.inner_text(timeout=500)
                     location = loc.strip()
-                except Exception:
-                    pass
+                except:
+                    try:
+                        loc = article.locator("span:has-text(',')").first.inner_text(timeout=500)
+                        location = loc.strip()
+                    except:
+                        location = ""
 
                 cars.append({
                     "Sorszám": len(cars) + 1,
