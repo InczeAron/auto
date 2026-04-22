@@ -193,7 +193,7 @@ def extract_price(text):
 def scrape_search(page, brand, model_slug, year_from, year_to, country):
     cars = []
 
-    for page_num in range(1, 4):
+    for page_num in range(1, 10):
         print(f"  📄 Oldal: {page_num}")
         url = (f"https://www.autoscout24.com/lst/{brand}/{model_slug}"
                f"?page={page_num}&fregfrom={year_from}&fregto={year_to}&cy={country}")
