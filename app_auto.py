@@ -110,7 +110,7 @@ def save_to_excel(cars, filename):
 
     for car in cars:
         rating = car.get("Pontszám") or 0
-        deal_text = f"{abs(rating)}% olcsóbb" if rating > 0 else f"{abs(rating)}% drágább"
+        deal_text = f"{abs(rating)}% cheaper" if rating > 0 else f"{abs(rating)}% more expensive"
         color = "008000" if rating > 0 else "FF0000"
 
         ws.append([
