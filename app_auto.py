@@ -395,6 +395,7 @@ def run_scraper():
                 for c in cars:
                     if c.get("Ár_num") and avg_price:
                         c["Pontszám"] = round((avg_price - c["Ár_num"]) / avg_price * 100)
+                        c["Átlag"] = avg_price   # 🔥 új
 
                 # Új autók szűrése
                 for car in cars:
