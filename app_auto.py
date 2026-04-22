@@ -265,14 +265,16 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                     pass
 
                 try:
-                    loc = article.locator("[class*='Location'], [class*='location']").first.inner_text(timeout=500)
-                    location = loc.strip()
+                    spans = article.locator("span").all()
+                    for s in spans:
+                        txt = s.inner_text(timeout=200).strip()
+
+                        # pl: "DE-12345 Berlin"
+                        if re.search(r"[A-Z]{2}-\d{4,5}", txt):
+                            location = txt
+                            break
                 except:
-                    try:
-                        loc = article.locator("span:has-text(',')").first.inner_text(timeout=500)
-                        location = loc.strip()
-                    except:
-                        location = ""
+                    location = ""
 
                 cars.append({
                     "Sorszám": len(cars) + 1,
@@ -421,12 +423,12 @@ def run_scraper():
 
             context.close()  # 🔥 FONTOS
 
-            print(f"\n📬 Új autók száma ({dealer_id}): {len(all_new_cars)}")
+            print(f"\n📬 Új autók száma / New cars ({dealer_id}): {len(all_new_cars)}")
 
             if not all_new_cars:
                 send_email(
-                    subject=f"🚗 AutoScout – {dealer_id} – nincs új autó",
-                    body="A mai futás során nem találtunk új hirdetéseket.",
+                    subject=f"🚗 AutoScout – {dealer_id} – nincs új autó / no new car",
+                    body="A mai futás során nem találtunk új hirdetéseket. / We didn't find any new ads during today's run.",
                     to_email=emails
                 )
                 continue
