@@ -151,7 +151,7 @@ def save_to_excel(cars, filename):
 # =========================
 # HTML EMAIL
 # =========================
-def build_email_html(cars, search_label=""):
+def build_email_html(cars, medians, search_label=""):
     html = f"""
     <html><body>
     <h2>🚗 Új autók – {search_label}</h2>
@@ -175,7 +175,17 @@ def build_email_html(cars, search_label=""):
             <td><a href="{car.get("Link")}">Open</a></td>
             <td style="color:{color};font-weight:bold;">{text}</td>
         </tr>"""
-    html += "</table></body></html>"
+    html += "</table>"
+    
+     # 🔥 MEDIÁN RÉSZ
+    if medians:
+        html += "<br><h3>📊 Median prices by year</h3><ul>"
+        for year, median in sorted(medians.items(), reverse=True):
+            html += f"<li>{year}: {int(median):,} €</li>".replace(",", ".")
+        html += "</ul>"
+
+    html += "</body></html>"
+
     return html
 
 
@@ -357,6 +367,8 @@ def run_scraper():
                   "--no-sandbox", "--disable-dev-shm-usage"]
         )
 
+        all_medians = {}
+
         for dealer in dealers:
             dealer_id = dealer["dealer_id"]
             emails    = dealer["emails"]
@@ -446,6 +458,8 @@ def run_scraper():
 
                     medians[year] = median
 
+                    all_medians.update(medians)
+
                 #pontszám számítás (évente)
                 for c in cars:
                     year = c.get("Év")
@@ -459,7 +473,7 @@ def run_scraper():
 
                     if median:
                         c["Pontszám"] = round((median - price) / median * 100)
-                        c["Medián"] = median  # extra debug/info
+                        c["Medián"] = median  # extra debug/info  
 
                 # Új autók szűrése
                 for car in cars:
@@ -511,7 +525,7 @@ def run_scraper():
             save_seen(dealer_id, all_new_ids)
 
             # Email
-            email_html = build_email_html(all_new_cars, dealer_id)
+            email_html = build_email_html(all_new_cars, all_medians, dealer_id)
 
             send_email(
                 subject=f"🚗 {len(all_new_cars)} új autó – {dealer_id}",
