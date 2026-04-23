@@ -6,6 +6,13 @@ from email.message import EmailMessage
 # =========================
 # DATABASE
 # =========================
+def parse_date(date_str):
+    try:
+        month, year = date_str.split("/")
+        return int(year), int(month)
+    except:
+        return (0, 0)
+
 def get_db_connection():
     return psycopg2.connect(os.environ.get("DATABASE_URL"), sslmode="require")
 
@@ -484,7 +491,13 @@ def run_scraper():
                 continue
 
             # Rendezés
-            all_new_cars.sort(key=lambda x: x.get("Pontszám") or -999, reverse=True)
+            all_new_cars.sort(
+                key=lambda x: (
+                    parse_date(x.get("Év")),          # 1️⃣ év+hónap
+                    x.get("Pontszám") or -999         # 2️⃣ deal
+                ),
+                reverse=True
+            )
 
             # Sorszám újra
             for i, c in enumerate(all_new_cars, 1):
