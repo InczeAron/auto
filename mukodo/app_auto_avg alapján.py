@@ -396,63 +396,13 @@ def run_scraper():
                     print("  ⚠️ NINCS TALÁLAT (block vagy selector hiba)")
 
                 # Átlag + pontszám
-                """valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
+                valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
                 avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
                 for c in cars:
                     if c.get("Ár_num") and avg_price:
                         c["Pontszám"] = round((avg_price - c["Ár_num"]) / avg_price * 100)
-                        c["Átlag"] = avg_price   # 🔥 új"""
-                
-                #csoportosítás év szerint
-                cars_by_year = {}
-
-                for c in cars:
-                    year = c.get("Év")
-                    price = c.get("Ár_num")
-
-                    if not year or not price:
-                        continue
-
-                    # pl: "03/2024" → "2024"
-                    year_only = year.split("/")[-1]
-
-                    if year_only not in cars_by_year:
-                        cars_by_year[year_only] = []
-
-                    cars_by_year[year_only].append(price)
-
-                #medián számítás évente
-                medians = {}
-
-                for year, prices in cars_by_year.items():
-                    prices = sorted(prices)
-                    n = len(prices)
-
-                    if n == 0:
-                        continue
-
-                    if n % 2 == 1:
-                        median = prices[n // 2]
-                    else:
-                        median = (prices[n//2 - 1] + prices[n//2]) / 2
-
-                    medians[year] = median
-
-                #pontszám számítás (évente)
-                for c in cars:
-                    year = c.get("Év")
-                    price = c.get("Ár_num")
-
-                    if not year or not price:
-                        continue
-
-                    year_only = year.split("/")[-1]
-                    median = medians.get(year_only)
-
-                    if median:
-                        c["Pontszám"] = round((median - price) / median * 100)
-                        c["Medián"] = median  # extra debug/info
+                        c["Átlag"] = avg_price   # 🔥 új
 
                 # Új autók szűrése
                 for car in cars:
