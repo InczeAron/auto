@@ -149,7 +149,7 @@ def api_login():
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute("SELECT jelsz FROM befele WHERE felh = %s", (email,))
+        cur.execute("SELECT jelsz, beosztas FROM befele WHERE felh = %s", (email,))
         row = cur.fetchone()
     except Exception as e:
         print("DB ERROR:", e)
@@ -175,7 +175,20 @@ def api_login():
             match = (pw_plain == stored)
 
         if match:
+            beosztas = row[1]  # 🔥 admin / user
+
+            ip = get_user_ip()
+
+            # 🔥 HA NEM ADMIN → IP CHECK
+            if beosztas != "admin":
+                if has_ip(ip):
+                    return jsonify({"success": False, "error": "Már volt belépés erről az IP-ről"})
+
+                save_ip(ip)
+
             session["logged_in"] = True
+            session["beosztas"] = beosztas  # 🔥 elmentjük session-be
+
             res = jsonify({"success": True})
         else:
             res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
