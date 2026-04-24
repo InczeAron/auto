@@ -154,7 +154,7 @@ def save_to_excel(cars, filename):
 def build_email_html(cars, medians, search_label=""):
     html = f"""
     <html><body>
-    <h2>🚗 New cars – {search_label}</h2>
+    <h2>🚗 Új autók – {search_label}</h2>
     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Arial;">
         <tr style="background-color:#2f4f6f;color:white;">
             <th>#</th><th>Title</th><th>Price</th><th>Mileage</th><th>Year</th><th>Location</th><th>Link</th><th>Deal</th>
@@ -494,7 +494,7 @@ def run_scraper():
 
             context.close()  # 🔥 FONTOS
 
-            print(f"\n📬 New cars ({dealer_id}): {len(all_new_cars)}")
+            print(f"\n📬 Új autók száma / New cars ({dealer_id}): {len(all_new_cars)}")
 
             if not all_new_cars:
                 send_email(
