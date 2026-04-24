@@ -171,7 +171,6 @@ def api_login():
         try:
             match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
         except Exception:
-            # fallback: sima szöveges összehasonlítás ha nincs bcrypt hash
             match = (pw_plain == stored)
 
         if match:
