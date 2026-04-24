@@ -621,29 +621,9 @@ def save_to_excel(cars, filepath, brand, model):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 22
 
-    # Medián számítás Ár_num alapján
-    def calc_median(prices):
-        s = sorted([p for p in prices if p])
-        n = len(s)
-        if n == 0:
-            return 0
-        return s[n // 2] if n % 2 == 1 else (s[n // 2 - 1] + s[n // 2]) / 2
-
+    # Átlagár számítás Ár_num alapján
     valid_prices = [c["Ár_num"] for c in cars if c["Ár_num"]]
-    median_price = calc_median(valid_prices)
-
-    # Évjárat szerinti medián
-    by_year = {}
-    for c in cars:
-        if not c.get("Ár_num"):
-            continue
-        # Részletekből évjárat kinyerése pl. "01/2022"
-        details = c.get("Részletek", "")
-        yr_match = re.search(r'(20\d{2})', details)
-        if yr_match:
-            yr = yr_match.group(1)
-            by_year.setdefault(yr, []).append(c["Ár_num"])
-    medians_by_year = {yr: calc_median(prices) for yr, prices in by_year.items()}
+    avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
 
     for i, car in enumerate(cars, 1):
         row = i + 1
@@ -660,13 +640,13 @@ def save_to_excel(cars, filepath, brand, model):
             else:
                 cell.font = Font(name="Arial", size=10)
 
-        # Ár értékelés medián alapján
+        # Ár értékelés – Ár_num alapján (szám!)
         price_num = car["Ár_num"]
         eval_cell = ws.cell(row=row, column=7)
         eval_cell.fill = fill
         eval_cell.alignment = Alignment(horizontal="center", vertical="center")
-        if median_price > 0 and price_num and price_num > 0:
-            diff_pct = (median_price - price_num) / median_price * 100
+        if avg_price > 0 and price_num and price_num > 0:
+            diff_pct = (avg_price - price_num) / avg_price * 100
             if diff_pct >= 15:
                 eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
                 eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
@@ -677,36 +657,18 @@ def save_to_excel(cars, filepath, brand, model):
             eval_cell.value = ""
             eval_cell.font = Font(name="Arial", size=10)
 
-    # Medián sor
-    median_row = len(cars) + 2
-    med_fill = PatternFill("solid", start_color="1F3864")
-    lbl = ws.cell(row=median_row, column=2, value="Medián ár / Median Price:")
+    avg_row = len(cars) + 2
+    avg_fill = PatternFill("solid", start_color="1F3864")
+    lbl = ws.cell(row=avg_row, column=2, value="Átlagár / Average Price:")
     lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    lbl.fill = med_fill
+    lbl.fill = avg_fill
     lbl.alignment = Alignment(horizontal="right", vertical="center")
-    v = ws.cell(row=median_row, column=3, value=f"{median_price:,.0f}".replace(",", ".") + " €" if median_price else "–")
+    v = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
     v.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    v.fill = med_fill
+    v.fill = avg_fill
     v.alignment = Alignment(horizontal="center", vertical="center")
     for col in [1, 4, 5, 6, 7]:
-        ws.cell(row=median_row, column=col).fill = med_fill
-
-    # Évjárat szerinti mediánok
-    if medians_by_year:
-        yr_title_row = median_row + 2
-        yr_title = ws.cell(row=yr_title_row, column=2, value="Medián évjárat szerint / Median by Year:")
-        yr_title.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-        yr_title.fill = med_fill
-        yr_title.alignment = Alignment(horizontal="right", vertical="center")
-        ws.cell(row=yr_title_row, column=1).fill = med_fill
-        for j, yr in enumerate(sorted(medians_by_year.keys(), reverse=True)):
-            r = yr_title_row + 1 + j
-            lbl2 = ws.cell(row=r, column=2, value=yr)
-            lbl2.font = Font(name="Arial", size=10, bold=True, color="1F3864")
-            lbl2.alignment = Alignment(horizontal="right", vertical="center")
-            val2 = ws.cell(row=r, column=3, value=f"{medians_by_year[yr]:,.0f}".replace(",", ".") + " €")
-            val2.font = Font(name="Arial", size=10, color="1F3864")
-            val2.alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=avg_row, column=col).fill = avg_fill
 
     for col, width in enumerate([5, 35, 15, 45, 30, 10, 20], 1):
         ws.column_dimensions[ws.cell(1, col).column_letter].width = width

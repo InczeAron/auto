@@ -259,52 +259,49 @@ async function pollStatus() {
   }
 }
 
-function calcMedian(arr) {
-  const s = [...arr].sort((a, b) => a - b);
-  const n = s.length;
-  if (n === 0) return 0;
-  return n % 2 === 1 ? s[Math.floor(n/2)] : (s[n/2-1] + s[n/2]) / 2;
-}
-
 function showResults(cars, brand, model) {
   document.getElementById("results-section").style.display = "block";
   document.getElementById("results-title").textContent =
     `📋 ${brand} ${model} – ${cars.length} hirdetés / listings`;
 
-  // Medián számítás
+  // Átlagár számítás Ár_num alapján
   const prices = cars.map(c => c["Ár_num"]).filter(p => p && p > 0);
-  const median = calcMedian(prices);
+  const sorted = prices.sort((a, b) => a - b);
 
-  // Évjárat szerinti medián – Részletek mezőből vonjuk ki az évet
-  const byYear = {};
-  cars.forEach(c => {
-    if (!c["Ár_num"]) return;
-    const details = c["Részletek"] || c["Év"] || "";
-    const match = details.match(/\b(20\d{2})\b/);
-    if (match) {
-      const yr = match[1];
-      if (!byYear[yr]) byYear[yr] = [];
-      byYear[yr].push(c["Ár_num"]);
-    }
-  });
+	let median = 0;
+	const n = sorted.length;
 
-  const mediansByYear = {};
-  for (const yr in byYear) {
-    mediansByYear[yr] = calcMedian(byYear[yr]);
-  }
+	if (n > 0) {
+	  if (n % 2 === 1) {
+		median = sorted[Math.floor(n / 2)];
+	  } else {
+		median = (sorted[n/2 - 1] + sorted[n/2]) / 2;
+	  }
+	}
+	
+	const byYear = {};
 
-  // Évjárat medián HTML – belül generáljuk
-  let medianHtml = "";
-  const sortedYears = Object.keys(mediansByYear).sort((a,b) => b - a);
-  if (sortedYears.length > 0) {
-    medianHtml = `<div style="background:#e8edf5;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;">
-      <b>Medián évjárat szerint / Median by Year:</b><br>` +
-      sortedYears.map(yr => {
-        const val = mediansByYear[yr].toLocaleString("de-DE", {maximumFractionDigits:0});
-        return `<span style="margin-right:16px;">📅 ${yr}: <b>${val} €</b></span>`;
-      }).join("") +
-    `</div>`;
-  }
+	cars.forEach(c => {
+	  if (!c["Év"] || !c["Ár_num"]) return;
+
+	  const year = c["Év"].split("/").pop();
+
+	  if (!byYear[year]) byYear[year] = [];
+	  byYear[year].push(c["Ár_num"]);
+	});
+
+	const mediansByYear = {};
+
+	for (const year in byYear) {
+	  const arr = byYear[year].sort((a,b)=>a-b);
+	  const n = arr.length;
+
+	  if (n % 2 === 1) {
+		mediansByYear[year] = arr[Math.floor(n/2)];
+	  } else {
+		mediansByYear[year] = (arr[n/2 - 1] + arr[n/2]) / 2;
+	  }
+	}
 
   const rows = cars.map((c, i) => {
     const p = c["Ár_num"] || 0;
@@ -323,7 +320,7 @@ function showResults(cars, brand, model) {
 
   const medianFmt = median ? median.toLocaleString("de-DE", {maximumFractionDigits:0}) + " €" : "–";
   document.getElementById("table-wrap").innerHTML = `
-    ${medianHtml}
+  ${medianHtml}
     <table>
       <thead><tr>
         <th>#</th><th>Cím / Title</th><th>Ár / Price</th>
@@ -341,6 +338,15 @@ function showResults(cars, brand, model) {
     </table>`;
   document.getElementById("results-section").scrollIntoView({behavior:"smooth"});
 }
+
+let medianHtml = "<br><b>Median by year:</b><br>";
+
+Object.keys(mediansByYear)
+  .sort((a,b)=>b-a)
+  .forEach(year => {
+    const val = mediansByYear[year].toLocaleString("de-DE", {maximumFractionDigits:0});
+    medianHtml += `${year}: ${val} €<br>`;
+  });
 
 function downloadExcel() { if (currentJobId) window.location = `/download/${currentJobId}`; }
 loadModels();
