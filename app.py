@@ -237,7 +237,15 @@ def get_models(brand):
 def search():
     data = request.json
     job_id = str(uuid.uuid4())
-   
+    jobs[job_id] = {"status": "running", "progress": 0, "log": [], "cars": []}
+    thread = threading.Thread(target=run_scrape, args=(job_id, data))
+    thread.daemon = True
+    thread.start()
+    return jsonify({"job_id": job_id})
+
+@app.route("/status/<job_id>")
+def status(job_id):
+    return jsonify(jobs.get(job_id, {}))
 
 @app.route("/download/<job_id>")
 def download(job_id):

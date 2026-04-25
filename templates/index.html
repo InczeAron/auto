@@ -220,11 +220,6 @@ async function startSearch() {
   };
 
   const res = await fetch("/search", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
-  if (res.status === 401) {
-    alert("Session expired / Munkamenet lejárt. Kérlek lépj be újra.");
-    window.location.reload();
-    return;
-  }
   const data = await res.json();
   currentJobId = data.job_id;
   pollInterval = setInterval(pollStatus, 1500);
@@ -233,12 +228,6 @@ async function startSearch() {
 async function pollStatus() {
   if (!currentJobId) return;
   const res = await fetch(`/status/${currentJobId}`);
-  if (res.status === 401) {
-    clearInterval(pollInterval);
-    alert("Session expired / Munkamenet lejárt. Kérlek lépj be újra.");
-    window.location.reload();
-    return;
-  }
   const job = await res.json();
   const logBox = document.getElementById("log-box");
   logBox.innerHTML = (job.log || []).map(l => `<div>${l}</div>`).join("");
