@@ -190,6 +190,9 @@ def api_login():
             session["beosztas"] = beosztas  # 🔥 elmentjük session-be
 
             res = jsonify({"success": True})
+            token = str(uuid.uuid4())
+            session["token"] = token
+            res = jsonify({"success": True, "token": token, "beosztas": beosztas})
         else:
             res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
     else:
@@ -215,29 +218,15 @@ def projects():
 
 @app.before_request
 def session_timeout():
-    # Kihagyott route-ok
-    if request.endpoint in ("static", "api_login", "api_hash"):
-        return
-    # Ha be van lépve, frissítjük az aktivitást
-    if session.get("logged_in"):
-        now = time.time()
-        last = session.get("last_activity", now)
-        if now - last > 1800:
-            session.clear()
-            if request.is_json or request.path.startswith(("/search", "/status", "/download", "/models")):
-                return jsonify({"error": "session_expired"}), 401
-            return "❌ Session expired. <a href='/'>Refresh</a>", 401
-        session["last_activity"] = now
+    pass  # Session kezelés az aronsoft.hu-n történik
 
 @app.route("/")
 def index():
     ip = get_user_ip()
-    # Ha be van lépve, engedjük be
-    if session.get("logged_in"):
-        return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
     # Ha nincs session és az IP már bent van → blokkol (csak test usernél kerül be IP)
     if has_ip(ip):
         return "❌ Egyszer már beléptél / You have already entered once."
+    save_ip(ip)
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
@@ -246,15 +235,9 @@ def get_models(brand):
 
 @app.route("/search", methods=["POST"])
 def search():
-    if not session.get("logged_in"):
-        return jsonify({"error": "session_expired"}), 401
     data = request.json
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "running", "progress": 0, "log": [], "cars": []}
-    thread = threading.Thread(target=run_scrape, args=(job_id, data))
-    thread.daemon = True
-    thread.start()
-    return jsonify({"job_id": job_id})
+   
 
 @app.route("/download/<job_id>")
 def download(job_id):
