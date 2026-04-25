@@ -228,7 +228,7 @@ def session_timeout():
     session["last_activity"] = time.time()
 
 # ip figyelés csak 1x lehessen belépni ip alapján
-@app.route("/")
+"""@app.route("/")
 def index():
     ip = get_user_ip()
     if has_ip(ip):
@@ -244,6 +244,17 @@ def index():
         else:
             return "❌ Egyszer már beléptél / You have already entered once."
     #save_ip(ip)
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))"""
+
+@app.route("/")
+def index():
+    ip = get_user_ip()
+    # Ha van aktív session, engedjük be (admin és test user is)
+    if session.get("logged_in"):
+        return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+    # Ha nincs session de az IP már bent van (test user volt), blokkoljuk
+    if has_ip(ip):
+        return "❌ Egyszer már beléptél / You have already entered once."
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
@@ -252,6 +263,8 @@ def get_models(brand):
 
 @app.route("/search", methods=["POST"])
 def search():
+    if not session.get("logged_in"):
+        return jsonify({"error": "session_expired"}), 401
     data = request.json
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "running", "progress": 0, "log": [], "cars": []}
