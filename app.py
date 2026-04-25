@@ -186,6 +186,7 @@ def api_login():
                 save_ip(ip)
 
             session["logged_in"] = True
+            session["last_activity"] = time.time()
             session["beosztas"] = beosztas  # 🔥 elmentjük session-be
 
             res = jsonify({"success": True})
@@ -214,27 +215,27 @@ def projects():
 
 @app.before_request
 def session_timeout():
-    # Statikus és login route-ok kihagyása
-    if request.endpoint in ("static",):
+    # Kihagyott route-ok
+    if request.endpoint in ("static", "api_login", "api_hash"):
         return
-    if "last_activity" in session:
+    # Ha be van lépve, frissítjük az aktivitást
+    if session.get("logged_in"):
         now = time.time()
-        if now - session["last_activity"] > 1800:
+        last = session.get("last_activity", now)
+        if now - last > 1800:
             session.clear()
-            # JSON kérés esetén 401, egyébként üzenet
             if request.is_json or request.path.startswith(("/search", "/status", "/download", "/models")):
                 return jsonify({"error": "session_expired"}), 401
-            return "❌ Session expired / Munkamenet lejárt. <a href='/'>Refresh</a>", 401
-    session["last_activity"] = time.time()
+            return "❌ Session expired. <a href='/'>Refresh</a>", 401
+        session["last_activity"] = now
 
-# ip figyelés csak 1x lehessen belépni ip alapján
 @app.route("/")
 def index():
     ip = get_user_ip()
-    # Ha van aktív session, engedjük be (admin és test user is)
+    # Ha be van lépve, engedjük be
     if session.get("logged_in"):
         return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
-    # Ha nincs session de az IP már bent van (test user volt), blokkoljuk
+    # Ha nincs session és az IP már bent van → blokkol (csak test usernél kerül be IP)
     if has_ip(ip):
         return "❌ Egyszer már beléptél / You have already entered once."
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
@@ -254,10 +255,6 @@ def search():
     thread.daemon = True
     thread.start()
     return jsonify({"job_id": job_id})
-
-@app.route("/status/<job_id>")
-def status(job_id):
-    return jsonify(jobs.get(job_id, {}))
 
 @app.route("/download/<job_id>")
 def download(job_id):
