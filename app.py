@@ -230,7 +230,7 @@ def session_timeout():
 # ip figyelés csak 1x lehessen belépni ip alapján
 @app.route("/")
 def index():
-    """ip = get_user_ip()
+    ip = get_user_ip()
     if has_ip(ip):
         # Ha már volt bent de a session lejárt, töröljük az IP-t és engedjük újra
         if "last_activity" not in session:
@@ -243,9 +243,8 @@ def index():
                 c.rollback()
         else:
             return "❌ Egyszer már beléptél / You have already entered once."
-    save_ip(ip)
-    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))"""
-    return render_template("index.html")
+    #save_ip(ip)
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
 def get_models(brand):
