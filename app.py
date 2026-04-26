@@ -182,7 +182,6 @@ def api_login():
             if beosztas != "admin":
                 if has_ip(ip):
                     return jsonify({"success": False, "error": "Már volt belépés erről az IP-ről"})
-
                 save_ip(ip)
 
             session["logged_in"] = True
@@ -226,7 +225,6 @@ def index():
     # Ha nincs session és az IP már bent van → blokkol (csak test usernél kerül be IP)
     if has_ip(ip):
         return "❌ Egyszer már beléptél / You have already entered once."
-    save_ip(ip)
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
