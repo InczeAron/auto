@@ -230,9 +230,9 @@ def index():
     if beosztas == "test" and has_ip(ip):
         return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
     # Ismeretlen látogató: IP blokk
-    #if has_ip(ip):
-    #    return "❌ Egyszer már beléptél / You have already entered once."
-    #return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+    if has_ip(ip):
+        return "❌ Egyszer már beléptél / You have already entered once."
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
 def get_models(brand):
