@@ -41,7 +41,7 @@ def get_db():
 def init_db():
     c = get_db()
     cur = c.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT PRIMARY KEY)")
+    cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT,user_email TEXT,PRIMARY KEY (ip, user_email))")
     c.commit()
 
 init_db()
@@ -54,20 +54,32 @@ def get_user_ip():
         return request.headers.get('X-Forwarded-For').split(',')[0]
     return request.remote_addr
 
-def has_ip(ip):
+"""def has_ip(ip):
     c = get_db()
     cur = c.cursor()
     cur.execute("SELECT 1 FROM used_ips WHERE ip=%s", (ip,))
+    return cur.fetchone() is not None"""
+
+def has_ip_for_user(ip, email):
+    c = get_db()
+    cur = c.cursor()
+    cur.execute(
+        "SELECT 1 FROM used_ips WHERE ip=%s AND user_email=%s",
+        (ip, email)
+    )
     return cur.fetchone() is not None
 
-def save_ip(ip):
+def save_ip(ip, email):
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute("INSERT INTO used_ips (ip) VALUES (%s)", (ip,))
+        cur.execute(
+            "INSERT INTO used_ips (ip, user_email) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+            (ip, email)
+        )
         c.commit()
     except Exception:
-        get_db().rollback()
+        c.rollback()
 
 jobs = {}
 
@@ -174,6 +186,30 @@ def api_login():
             match = (pw_plain == stored)
 
         if match:
+            beosztas = row[1]
+            ip = get_user_ip()
+
+            print("LOGIN:", email, beosztas, ip)
+
+            # 🔥 ADMIN = FULL BYPASS
+            if beosztas == "admin":
+                print("🟢 ADMIN LOGIN – nincs IP check")
+
+            else:
+                if has_ip_for_user(ip, email):
+                    print("⛔ már belépett erről az IP-ről")
+                    return jsonify({"success": False, "error": "Erről az IP-ről már beléptél"})
+
+                save_ip(ip, email)
+                print("💾 IP mentve userhez")
+
+            session["logged_in"] = True
+            session["beosztas"] = beosztas
+            session["email"] = email
+
+            return jsonify({"success": True})
+
+        """if match:
             beosztas = row[1]  # 🔥 admin / user
 
             ip = get_user_ip()
@@ -195,7 +231,7 @@ def api_login():
         else:
             res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
     else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
+        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})"""
 
     res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
     return res
@@ -221,18 +257,7 @@ def session_timeout():
 
 @app.route("/")
 def index():
-    ip = get_user_ip()
-    beosztas = request.args.get("beosztas", "")
-    # Admin: mindig beenged
-    if beosztas == "admin":
-        return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
-    # Test user visszatérés: ha az IP bent van ÉS beosztas=test jön → beenged
-    if beosztas == "test" and has_ip(ip):
-        return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
-    # Ismeretlen látogató: IP blokk
-    if has_ip(ip):
-        return "❌ Egyszer már beléptél / You have already entered once."
-    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+    return render_template("index.html")
 
 @app.route("/models/<brand>")
 def get_models(brand):
