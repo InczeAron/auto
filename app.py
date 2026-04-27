@@ -174,28 +174,6 @@ def api_login():
             match = (pw_plain == stored)
 
         if match:
-            beosztas = row[1]
-            ip = get_user_ip()
-
-            print("LOGIN:", email, beosztas, ip)
-
-            # ADMIN = teljes bypass
-            if beosztas != "admin":
-                if has_ip(ip):
-                    print("⛔ IP már használt")
-                    return jsonify({"success": False, "error": "Már volt belépés erről az IP-ről"})
-                save_ip(ip)
-                print("💾 IP mentve")
-
-            else:
-                print("🟢 ADMIN bypass")
-
-            session["logged_in"] = True
-            session["beosztas"] = beosztas
-
-            return jsonify({"success": True})
-
-        """if match:
             beosztas = row[1]  # 🔥 admin / user
 
             ip = get_user_ip()
@@ -215,7 +193,7 @@ def api_login():
             session["token"] = token
             res = jsonify({"success": True, "token": token, "beosztas": beosztas})
         else:
-            res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})"""
+            res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
     else:
         res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
 
