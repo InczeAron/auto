@@ -223,10 +223,13 @@ def session_timeout():
 def index():
     ip = get_user_ip()
     beosztas = request.args.get("beosztas", "")
-    # Admin: IP ellenőrzés nélkül beenged
+    # Admin: mindig beenged
     if beosztas == "admin":
         return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
-    # Test user: IP ellenőrzés
+    # Test user visszatérés: ha az IP bent van ÉS beosztas=test jön → beenged
+    if beosztas == "test" and has_ip(ip):
+        return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+    # Ismeretlen látogató: IP blokk
     if has_ip(ip):
         return "❌ Egyszer már beléptél / You have already entered once."
     return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
