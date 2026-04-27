@@ -54,21 +54,28 @@ def get_user_ip():
         return request.headers.get('X-Forwarded-For').split(',')[0]
     return request.remote_addr
 
-"""def has_ip(ip):
-    c = get_db()
-    cur = c.cursor()
-    cur.execute("SELECT 1 FROM used_ips WHERE ip=%s", (ip,))
-    return cur.fetchone() is not None"""
-
 def has_ip_for_user(ip, email):
     c = get_db()
     cur = c.cursor()
+    # Csak email alapján ellenőriz – ha bármilyen IP-ről már belépett, blokkol
     cur.execute(
-        "SELECT 1 FROM used_ips WHERE ip=%s AND user_email=%s",
-        (ip, email)
+        "SELECT 1 FROM used_ips WHERE user_email=%s",
+        (email,)
     )
     return cur.fetchone() is not None
 
+def save_ip(ip, email):
+    try:
+        c = get_db()
+        cur = c.cursor()
+        cur.execute(
+            "INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)",
+            (ip, email)
+        )
+        c.commit()
+    except Exception:
+        c.rollback()
+        
 def save_ip(ip, email):
     try:
         c = get_db()
