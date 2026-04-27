@@ -179,11 +179,10 @@ def api_login():
             ip = get_user_ip()
 
             # 🔥 HA NEM ADMIN → IP CHECK
-            if session.get("beosztas") != "admin":
+            if beosztas != "admin":
                 if has_ip(ip):
                     return jsonify({"success": False, "error": "Már volt belépés erről az IP-ről"})
-                if session.get("beosztas") != "admin":
-                    save_ip(ip)
+                save_ip(ip)
 
             session["logged_in"] = True
             session["last_activity"] = time.time()
@@ -223,11 +222,14 @@ def session_timeout():
 @app.route("/")
 def index():
     ip = get_user_ip()
-    # Ha nincs session és az IP már bent van → blokkol (csak test usernél kerül be IP)
-    if session.get("beosztas") != "admin":
-        if has_ip(ip):
-            return jsonify({"success": False, "error": "❌ Egyszer már beléptél / You have already entered once."})
+    beosztas = request.args.get("beosztas", "")
+    # Admin: IP ellenőrzés nélkül beenged
+    if beosztas == "admin":
         return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+    # Test user: IP ellenőrzés
+    if has_ip(ip):
+        return "❌ Egyszer már beléptél / You have already entered once."
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
 def get_models(brand):
