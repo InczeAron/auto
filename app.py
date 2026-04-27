@@ -178,6 +178,42 @@ def api_login():
     print("ROW FOUND:", row is not None)
 
     if row:
+        stored = row[0]
+        beosztas = row[1]
+
+        print("EMAIL:", email)
+        print("INPUT PW:", pw_plain)
+        print("STORED PW:", stored)
+
+        try:
+            match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
+            print("BCRYPT MATCH:", match)
+        except Exception as e:
+            print("BCRYPT ERROR:", e)
+            match = (pw_plain == stored)
+            print("PLAIN MATCH:", match)
+
+        if match:
+            print("✅ LOGIN OK")
+            
+            ip = get_user_ip()
+
+            if beosztas != "admin":
+                if has_ip_for_user(ip, email):
+                    return jsonify({"success": False, "error": "Erről az IP-ről már beléptél"})
+                save_ip(ip, email)
+
+            session["logged_in"] = True
+            session["beosztas"] = beosztas
+            session["email"] = email
+
+            return jsonify({"success": True})
+
+        else:
+            print("❌ LOGIN FAIL")
+            return jsonify({"success": False, "error": "Hibás jelszó"})
+
+    """if row:
         stored = row[0].strip()
         print("STORED:", stored)
         try:
@@ -209,7 +245,7 @@ def api_login():
 
             return jsonify({"success": True})
 
-        """if match:
+        if match:
             beosztas = row[1]  # 🔥 admin / user
 
             ip = get_user_ip()
@@ -231,10 +267,10 @@ def api_login():
         else:
             res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
     else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})"""
+        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
 
     res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-    return res
+    return res"""
 
 # Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
 """@app.route("/api/hash", methods=["GET"])
