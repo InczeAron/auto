@@ -123,6 +123,13 @@ ALLOWED_ORIGINS = [
     "http://www.aronsoft.hu",
 ]
 
+def cors_response(data, status=200):
+    res = jsonify(data)
+    res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
+    res.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    res.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+    return res, status
+
 def get_cors_origin():
     origin = request.headers.get("Origin", "")
     return origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
@@ -193,7 +200,7 @@ def api_login():
             session["beosztas"] = beosztas
             session["email"] = email
 
-            return jsonify({"success": True})
+            return cors_response({"success": True})
 
         else:
             print("❌ LOGIN FAIL")
