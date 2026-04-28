@@ -15,6 +15,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 import time, os, re, threading, uuid, secrets
 import psycopg2
+import bcrypt
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
@@ -22,36 +23,58 @@ app.secret_key = os.environ.get("SECRET_KEY", "autoscout-fallback-key-2026")
 # =========================
 # DATABASE
 # =========================
-conn = psycopg2.connect(os.environ["DATABASE_URL"])
-cur = conn.cursor()
-cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT PRIMARY KEY)")
-conn.commit()
+_conn = None
+
+def get_db():
+    global _conn
+    try:
+        if _conn is None or _conn.closed:
+            _conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        else:
+            # ping – ha megszakadt a kapcsolat, újracsatlakozik
+            _conn.cursor().execute("SELECT 1")
+    except Exception:
+        _conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    return _conn
+
+# Táblák létrehozása induláskor
+def init_db():
+    c = get_db()
+    cur = c.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS used_ips (ip TEXT,user_email TEXT,PRIMARY KEY (ip, user_email))")
+    c.commit()
+
+init_db()
 
 # =========================
 # IP KEZELÉS
 # =========================
-def get_user_ip():
-    if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0]
-    return request.remote_addr
 
-def has_ip(ip):
-    cur.execute("SELECT 1 FROM used_ips WHERE ip=%s", (ip,))
-    return cur.fetchone() is not None
+def has_logged_in(email):
+    c = get_db()
+    cur = c.cursor()
+    cur.execute("SELECT telefon FROM befele WHERE felh=%s", (email,))
+    row = cur.fetchone()
+    return row and row[0] == "logged_in"
 
-def save_ip(ip):
+def mark_logged_in(email, ip):
     try:
-        cur.execute("INSERT INTO used_ips (ip) VALUES (%s)", (ip,))
-        conn.commit()
+        c = get_db()
+        cur = c.cursor()
+        # Telefon oszlopba írjuk hogy belépett
+        cur.execute("UPDATE befele SET telefon='logged_in' WHERE felh=%s", (email,))
+        # IP naplózás megmarad infó célból
+        cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
+        c.commit()
     except Exception:
-        conn.rollback()
+        c.rollback()
 
 jobs = {}
 
 BRANDS = {
     "Audi":       ["A1","A2","A3","A4","A5","A6","A7","A8","Q3","Q5","Q7","TT","R8"],
-    "BMW":        ["1-es","2-es","3-as","4-es","5-ös","6-os","7-es","X1","X3","X5","Z4","M3","M5"],
-    "Mercedes":   ["A","B","C","E","S","GLA","GLC","GLE","GLK","CLA","CLS","SLK"],
+    "BMW":        ["1","2","3","4","5","6","7","X1","X3","X5","Z4","M3","M5"],
+    "Mercedes-Benz":   ["A","B","C","E","S","GLA","GLC","GLE","GLK","CLA","CLS","SLK"],
     "Volkswagen": ["Golf","Polo","Passat","Tiguan","Touareg","T-Roc","ID.3","ID.4","Caddy","Sharan"],
     "Ford":       ["Focus","Fiesta","Mondeo","Kuga","Puma","Mustang","Galaxy","S-Max","Transit"],
     "Opel":       ["Astra","Corsa","Insignia","Zafira","Mokka","Crossland","Grandland"],
@@ -91,58 +114,116 @@ COUNTRIES = {
     "Croatia / Horvátország":      "HR",
     "Luxembourg / Luxemburg":      "L",
 }
+
 # 30 perc inaktivitás után kiléptetés
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
+ALLOWED_ORIGINS = [
+    "https://aronsoft.hu",
+    "https://www.aronsoft.hu",
+    "http://aronsoft.hu",
+    "http://www.aronsoft.hu",
+]
 
-    # 🔐 ide jön a saját login logikád
-    if email == "admin@gmail.com" and password == "1234":
-        session["logged_in"] = True
-        session.permanent = True
-        return jsonify({"success": True})
+def cors_response(data, status=200):
+    res = jsonify(data)
+    res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
+    res.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    res.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+    return res, status
 
-    return jsonify({"success": False, "error": "Hibás adatok"})
+def get_cors_origin():
+    origin = request.headers.get("Origin", "")
+    return origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
+
+def get_user_ip():
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    return request.remote_addr
+
+@app.route("/api/login", methods=["POST", "OPTIONS"])
+def api_login():
+    if request.method == "OPTIONS":
+        res = app.make_default_options_response()
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
+        res.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        res.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        return res
+
+    data = request.json or {}
+
+    email = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "").strip().encode("utf-8")
+
+    if not email or not password:
+        res = jsonify({"success": False, "error": "Hiányzó adatok"})
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
+        return res, 400
+
+    try:
+        c = get_db()
+        cur = c.cursor()
+        cur.execute("SELECT jelsz, beosztas FROM befele WHERE felh = %s", (email,))
+        row = cur.fetchone()
+    except Exception as e:
+        print("DB ERROR:", e)
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
+        res = jsonify({"success": False, "error": "DB hiba"})
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
+        return cors_response({"success": False, "error": "DB hiba"}, 500)
+
+    pw_plain = password.decode("utf-8").strip()
+    print("EMAIL:", email)
+    print("ROW FOUND:", row is not None)
+
+    if row:
+        stored = row[0]
+        beosztas = row[1]
+
+        print("EMAIL:", email)
+        print("INPUT PW:", pw_plain)
+        print("STORED PW:", stored)
+
+        try:
+            match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
+            print("BCRYPT MATCH:", match)
+        except Exception as e:
+            print("BCRYPT ERROR:", e)
+            match = (pw_plain == stored)
+            print("PLAIN MATCH:", match)
+
+        if match:
+            print("✅ LOGIN OK")            
+
+            if beosztas != "admin":
+                if has_logged_in(email):
+                    return cors_response({"success": False, "error": "Hibás jelszó / Wrong password"}, 401)
+                mark_logged_in(email, get_user_ip())
+
+            session["telefon"] = True
+            session["beosztas"] = beosztas
+            session["email"] = email
+
+            return cors_response({"success": True})
+
+        else:
+            print("❌ LOGIN FAIL")
+            return cors_response({"success": False, "error": "Hibás jelszó"}, 401)
 
 @app.route("/projects")
 def projects():
-    if not session.get("logged_in"):
+    if not session.get("telefon"):
         return redirect("/")
     return render_template("projects.html")
 
 @app.before_request
 def session_timeout():
-    # Statikus és login route-ok kihagyása
-    if request.endpoint in ("static",):
-        return
-    if "last_activity" in session:
-        now = time.time()
-        if now - session["last_activity"] > 1800:
-            session.clear()
-            # JSON kérés esetén 401, egyébként üzenet
-            if request.is_json or request.path.startswith(("/search", "/status", "/download", "/models")):
-                return jsonify({"error": "session_expired"}), 401
-            return "❌ Session expired / Munkamenet lejárt. <a href='/'>Refresh</a>", 401
-    session["last_activity"] = time.time()
+    pass  # Session kezelés az aronsoft.hu-n történik
 
-# ip figyelés csak 1x lehessen belépni ip alapján
 @app.route("/")
 def index():
-    ip = get_user_ip()
-    if has_ip(ip):
-        # Ha már volt bent de a session lejárt, töröljük az IP-t és engedjük újra
-        if "last_activity" not in session:
-            try:
-                cur.execute("DELETE FROM used_ips WHERE ip=%s", (ip,))
-                conn.commit()
-            except Exception:
-                conn.rollback()
-        else:
-            return "❌ Egyszer már beléptél / You have already entered once."
-    save_ip(ip)
-    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
+    return render_template("index.html")
 
 @app.route("/models/<brand>")
 def get_models(brand):
@@ -205,19 +286,57 @@ def extract_price(text):
     return None
 
 def run_scrape(job_id, data):
-    brand      = data.get("brand", "")
-    model      = data.get("model", "")
-    year_from  = data.get("year_from") or None
-    year_to    = data.get("year_to") or None
-    price_from = data.get("price_from") or None
-    price_to   = data.get("price_to") or None
-    country    = COUNTRIES.get(data.get("country", ""), "")
+    brand       = data.get("brand", "")
+    model       = data.get("model", "")
+    year_from   = data.get("year_from") or None
+    year_to     = data.get("year_to") or None
+    price_from  = data.get("price_from") or None
+    price_to    = data.get("price_to") or None
+    country     = COUNTRIES.get(data.get("country", ""), "")
+    km_from     = data.get("km_from") or None
+    km_to       = data.get("km_to") or None
+    seller_type = data.get("seller_type") or None
 
     jobs[job_id]["brand"] = brand
     jobs[job_id]["model"] = model
 
     brand_slug = brand.lower().replace(" ", "-")
-    model_slug = model.lower().replace(" ", "-")
+    model_slug = model.lower().replace(" ", "-") 
+
+    # BMW sorozat slug mapping
+    BMW_SLUGS = {
+        "1": "1-series-(all)",
+        "2": "2-series-(all)",
+        "3": "3-series-(all)",
+        "4": "4-series-(all)",
+        "5": "5-series-(all)",
+        "6": "6-series-(all)",
+        "7": "7-series-(all)",
+        "8": "8-series-(all)",
+        "x1": "x1", "x2": "x2", "x3": "x3",
+        "x4": "x4", "x5": "x5", "x6": "x6", "x7": "x7",
+        "z4": "z4", "m3": "m3", "m5": "m5",
+    }
+    if brand_slug == "bmw" and model.lower() in BMW_SLUGS:
+        model_slug = BMW_SLUGS[model.lower()]   
+
+    # Mercedes-Benz model slug fix
+    if brand_slug == "mercedes-benz":
+        MERCEDES_MODEL_MAP = {
+            "a":   "a-class-(all)",
+            "b":   "b-class-(all)",
+            "c":   "c-class-(all)",
+            "e":   "e-class-(all)",
+            "s":   "s-class-(all)",
+            "gla": "gla-(all)",
+            "glc": "glc-(all)",
+            "gle": "gle-(all)",
+            "glk": "glk-(all)",
+            "cla": "cla-(all)",
+            "cls": "cls-(all)",
+            "slk": "slk-(all)",
+        }
+        model_slug = MERCEDES_MODEL_MAP.get(model_slug, model_slug)
     cars = []
 
     try:
@@ -236,11 +355,18 @@ def run_scrape(job_id, data):
 
             for page_num in range(1, 11):
                 params = f"page={page_num}"
+                #if model:      params += f"&model={model.upper()}"
                 if year_from:  params += f"&fregfrom={year_from}"
                 if year_to:    params += f"&fregto={year_to}"
                 if price_from: params += f"&pricefrom={price_from}"
                 if price_to:   params += f"&priceto={price_to}"
                 if country:    params += f"&cy={country}"
+                if km_from:     params += f"&kmfrom={km_from}"
+                if km_to:       params += f"&kmto={km_to}"
+                if seller_type == "dealer":
+                    params += "&atype=C&adtype=D"
+                elif seller_type == "private":
+                    params += "&atype=C&adtype=P"
                 if year_from or year_to:
                     params += "&sort=age&desc=1"
                 elif price_from or price_to:
@@ -390,8 +516,54 @@ def run_scrape(job_id, data):
                         if link:
                             link = link.split("?")[0]
 
+                        # Eladó típusának kiolvasása az article HTML-ből
+                        seller_label = ""
+                        try:
+                            full_text = article.inner_text(timeout=1000)
+                            full_html = article.inner_html(timeout=1000)
+                            
+                            # Debug: első article szövegének kiírása
+                            #if len(cars) == 0:
+                                #print("=== ARTICLE TEXT SAMPLE ===")
+                                #print(full_text[:500])
+                                #print("=== ARTICLE HTML SAMPLE ===")
+                                #print(full_html[:800])
+                                #print("===========================")                                             
+                            # Seller típus keresése szövegben és HTML-ben
+                            combined = full_text + full_html
+                            combined_lower = combined.lower()
+                            if any(x in combined_lower for x in ["private seller", "privateseller", "private-seller",
+                                                                  "privatanbieter", "private_seller",
+                                                                  "seller-private", "adtypeprivate"]):
+                                seller_label = "private"
+                            elif any(x in combined_lower for x in ["dealer", "händler",
+                                                                    "adtypedealer", "seller-dealer"]):
+                                seller_label = "dealer"
+                        except Exception as e:
+                            print(f"Seller detect error: {e}")
+                            pass
+
+                        # Szűrés eladó típusa alapján
+                        if seller_type == "private" and seller_label == "dealer":
+                            continue
+                        if seller_type == "dealer" and seller_label == "private":
+                            continue
+
                         if title:
-                            # Ár megjelenítése: szám → formázott string
+                            # 🔥 MODEL SZŰRÉS (pl. GLA csak önálló szóként)
+                            if model:
+                                model_clean = model.lower().strip()
+                                title_clean = title.lower().strip()
+
+                                # 🔥 MERCEDES
+                                if brand.lower() == "mercedes-benz":
+                                    if not re.search(rf"\b{re.escape(model_clean)}\s?\d+", title_clean):
+                                        continue
+
+                                # 🔥 BMW (javítás) URL már szűr sorozatra
+                                elif brand.lower() == "bmw":
+                                    pass
+                            # Ár megjelenítése: szám → formázott string                                       
                             price_display = f"{price_num:,} €".replace(",", ".") if price_num else price_text
                             cars.append({
                                 "Cím":     title,
@@ -414,7 +586,7 @@ def run_scrape(job_id, data):
         log(job_id, f"🎉 Done! / Kész! {len(cars)} listings / hirdetés collected.")
 
     except Exception as e:
-        log(job_id, f"⚠️ Hiba történt: {e}")
+        log(job_id, f"⚠️ Hiba, de megyünk tovább: {e}")
         # Ha már vannak összegyűjtött autók, azokat mentsük el
         if cars:
             cars.sort(key=lambda x: x["Ár_num"] if x["Ár_num"] else 999999)
@@ -423,8 +595,7 @@ def run_scrape(job_id, data):
             log(job_id, f"🎉 Részleges eredmény / Partial result: {len(cars)} listings / hirdetés.")
         else:
             jobs[job_id]["status"] = "error"
-            log(job_id, "❌ Nincs eredmény / No results collected.")
-        
+            log(job_id, "❌ Nincs eredmény / No results collected.")                         
 
 def save_to_excel(cars, filepath, brand, model):
     wb = Workbook()
@@ -441,9 +612,29 @@ def save_to_excel(cars, filepath, brand, model):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 22
 
-    # Átlagár számítás Ár_num alapján
+    # Medián számítás Ár_num alapján
+    def calc_median(prices):
+        s = sorted([p for p in prices if p])
+        n = len(s)
+        if n == 0:
+            return 0
+        return s[n // 2] if n % 2 == 1 else (s[n // 2 - 1] + s[n // 2]) / 2
+
     valid_prices = [c["Ár_num"] for c in cars if c["Ár_num"]]
-    avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
+    median_price = calc_median(valid_prices)
+
+    # Évjárat szerinti medián
+    by_year = {}
+    for c in cars:
+        if not c.get("Ár_num"):
+            continue
+        # Részletekből évjárat kinyerése pl. "01/2022"
+        details = c.get("Részletek", "")
+        yr_match = re.search(r'(20\d{2})', details)
+        if yr_match:
+            yr = yr_match.group(1)
+            by_year.setdefault(yr, []).append(c["Ár_num"])
+    medians_by_year = {yr: calc_median(prices) for yr, prices in by_year.items()}
 
     for i, car in enumerate(cars, 1):
         row = i + 1
@@ -460,13 +651,13 @@ def save_to_excel(cars, filepath, brand, model):
             else:
                 cell.font = Font(name="Arial", size=10)
 
-        # Ár értékelés – Ár_num alapján (szám!)
+        # Ár értékelés medián alapján
         price_num = car["Ár_num"]
         eval_cell = ws.cell(row=row, column=7)
         eval_cell.fill = fill
         eval_cell.alignment = Alignment(horizontal="center", vertical="center")
-        if avg_price > 0 and price_num and price_num > 0:
-            diff_pct = (avg_price - price_num) / avg_price * 100
+        if median_price > 0 and price_num and price_num > 0:
+            diff_pct = (median_price - price_num) / median_price * 100
             if diff_pct >= 15:
                 eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
                 eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
@@ -477,18 +668,36 @@ def save_to_excel(cars, filepath, brand, model):
             eval_cell.value = ""
             eval_cell.font = Font(name="Arial", size=10)
 
-    avg_row = len(cars) + 2
-    avg_fill = PatternFill("solid", start_color="1F3864")
-    lbl = ws.cell(row=avg_row, column=2, value="Átlagár / Average Price:")
+    # Medián sor
+    median_row = len(cars) + 2
+    med_fill = PatternFill("solid", start_color="1F3864")
+    lbl = ws.cell(row=median_row, column=2, value="Medián ár / Median Price:")
     lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    lbl.fill = avg_fill
+    lbl.fill = med_fill
     lbl.alignment = Alignment(horizontal="right", vertical="center")
-    v = ws.cell(row=avg_row, column=3, value=f"{avg_price:,.0f}".replace(",", ".") + " €" if avg_price else "–")
+    v = ws.cell(row=median_row, column=3, value=f"{median_price:,.0f}".replace(",", ".") + " €" if median_price else "–")
     v.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    v.fill = avg_fill
+    v.fill = med_fill
     v.alignment = Alignment(horizontal="center", vertical="center")
     for col in [1, 4, 5, 6, 7]:
-        ws.cell(row=avg_row, column=col).fill = avg_fill
+        ws.cell(row=median_row, column=col).fill = med_fill
+
+    # Évjárat szerinti mediánok
+    if medians_by_year:
+        yr_title_row = median_row + 2
+        yr_title = ws.cell(row=yr_title_row, column=2, value="Medián évjárat szerint / Median by Year:")
+        yr_title.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+        yr_title.fill = med_fill
+        yr_title.alignment = Alignment(horizontal="right", vertical="center")
+        ws.cell(row=yr_title_row, column=1).fill = med_fill
+        for j, yr in enumerate(sorted(medians_by_year.keys(), reverse=True)):
+            r = yr_title_row + 1 + j
+            lbl2 = ws.cell(row=r, column=2, value=yr)
+            lbl2.font = Font(name="Arial", size=10, bold=True, color="1F3864")
+            lbl2.alignment = Alignment(horizontal="right", vertical="center")
+            val2 = ws.cell(row=r, column=3, value=f"{medians_by_year[yr]:,.0f}".replace(",", ".") + " €")
+            val2.font = Font(name="Arial", size=10, color="1F3864")
+            val2.alignment = Alignment(horizontal="center", vertical="center")
 
     for col, width in enumerate([5, 35, 15, 45, 30, 10, 20], 1):
         ws.column_dimensions[ws.cell(1, col).column_letter].width = width
