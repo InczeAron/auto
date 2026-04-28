@@ -49,41 +49,22 @@ init_db()
 # =========================
 # IP KEZELÉS
 # =========================
-def get_user_ip():
-    if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0]
-    return request.remote_addr
 
-def has_ip_for_user(ip, email):
+def has_logged_in(email):
     c = get_db()
     cur = c.cursor()
-    # Csak email alapján ellenőriz – ha bármilyen IP-ről már belépett, blokkol
-    cur.execute(
-        "SELECT 1 FROM used_ips WHERE user_email=%s",
-        (email,)
-    )
-    return cur.fetchone() is not None
+    cur.execute("SELECT telefon FROM befele WHERE felh=%s", (email,))
+    row = cur.fetchone()
+    return row and row[0] == "logged_in"
 
-def save_ip(ip, email):
+def mark_logged_in(email, ip):
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute(
-            "INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)",
-            (ip, email)
-        )
-        c.commit()
-    except Exception:
-        c.rollback()
-        
-def save_ip(ip, email):
-    try:
-        c = get_db()
-        cur = c.cursor()
-        cur.execute(
-            "INSERT INTO used_ips (ip, user_email) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-            (ip, email)
-        )
+        # Telefon oszlopba írjuk hogy belépett
+        cur.execute("UPDATE befele SET telefon='logged_in' WHERE felh=%s", (email,))
+        # IP naplózás megmarad infó célból
+        cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
         c.commit()
     except Exception:
         c.rollback()
@@ -201,16 +182,14 @@ def api_login():
             print("PLAIN MATCH:", match)
 
         if match:
-            print("✅ LOGIN OK")
-            
-            ip = get_user_ip()
+            print("✅ LOGIN OK")            
 
             if beosztas != "admin":
-                if has_ip_for_user(ip, email):
-                    return jsonify({"success": False, "error": "Erről az IP-ről már beléptél"})
-                save_ip(ip, email)
+                if has_logged_in(email):
+                    return jsonify({"success": False, "error": "Már beléptél egyszer / Already logged in once"})
+                mark_logged_in(email)
 
-            session["logged_in"] = True
+            session["telefon"] = True
             session["beosztas"] = beosztas
             session["email"] = email
 
@@ -220,77 +199,9 @@ def api_login():
             print("❌ LOGIN FAIL")
             return jsonify({"success": False, "error": "Hibás jelszó"})
 
-    """if row:
-        stored = row[0].strip()
-        print("STORED:", stored)
-        try:
-            match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
-        except Exception:
-            match = (pw_plain == stored)
-
-        if match:
-            beosztas = row[1]
-            ip = get_user_ip()
-
-            print("LOGIN:", email, beosztas, ip)
-
-            # 🔥 ADMIN = FULL BYPASS
-            if beosztas == "admin":
-                print("🟢 ADMIN LOGIN – nincs IP check")
-
-            else:
-                if has_ip_for_user(ip, email):
-                    print("⛔ már belépett erről az IP-ről")
-                    return jsonify({"success": False, "error": "Erről az IP-ről már beléptél"})
-
-                save_ip(ip, email)
-                print("💾 IP mentve userhez")
-
-            session["logged_in"] = True
-            session["beosztas"] = beosztas
-            session["email"] = email
-
-            return jsonify({"success": True})
-
-        if match:
-            beosztas = row[1]  # 🔥 admin / user
-
-            ip = get_user_ip()
-
-            # 🔥 HA NEM ADMIN → IP CHECK
-            if beosztas != "admin":
-                if has_ip(ip):
-                    return jsonify({"success": False, "error": "Már volt belépés erről az IP-ről"})
-                save_ip(ip)
-
-            session["logged_in"] = True
-            session["last_activity"] = time.time()
-            session["beosztas"] = beosztas  # 🔥 elmentjük session-be
-
-            res = jsonify({"success": True})
-            token = str(uuid.uuid4())
-            session["token"] = token
-            res = jsonify({"success": True, "token": token, "beosztas": beosztas})
-        else:
-            res = jsonify({"success": False, "error": "Hibás jelszó / Wrong password"})
-    else:
-        res = jsonify({"success": False, "error": "Nincs ilyen user / User not found"})
-
-    res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-    return res"""
-
-# Felhasználó jelszó hash generáló segédroute (csak egyszer kell, utána törölhető)
-"""@app.route("/api/hash", methods=["GET"])
-def api_hash():
-    pw = request.args.get("pw", "")
-    if not pw:
-        return "?pw=yourpassword", 400
-    hashed = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    return jsonify({"hash": hashed})"""
-
 @app.route("/projects")
 def projects():
-    if not session.get("logged_in"):
+    if not session.get("telefon"):
         return redirect("/")
     return render_template("projects.html")
 
@@ -784,4 +695,3 @@ def save_to_excel(cars, filepath, brand, model):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(debug=False, host="0.0.0.0", port=port)
-#incze áron
