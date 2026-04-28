@@ -134,6 +134,11 @@ def get_cors_origin():
     origin = request.headers.get("Origin", "")
     return origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
 
+def get_user_ip():
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    return request.remote_addr
+
 @app.route("/api/login", methods=["POST", "OPTIONS"])
 def api_login():
     if request.method == "OPTIONS":
@@ -194,7 +199,7 @@ def api_login():
             if beosztas != "admin":
                 if has_logged_in(email):
                     return cors_response({"success": False, "error": "Hibás jelszó / Wrong password"}, 401)
-                mark_logged_in(email)
+                mark_logged_in(email, get_user_ip())
 
             session["telefon"] = True
             session["beosztas"] = beosztas
