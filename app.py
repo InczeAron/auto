@@ -166,7 +166,7 @@ def api_login():
             pass
         res = jsonify({"success": False, "error": "DB hiba"})
         res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-        return res, 500
+        return cors_response({"success": False, "error": "DB hiba"}, 500)
 
     pw_plain = password.decode("utf-8").strip()
     print("EMAIL:", email)
@@ -193,7 +193,7 @@ def api_login():
 
             if beosztas != "admin":
                 if has_logged_in(email):
-                    return jsonify({"success": False, "error": "Már beléptél egyszer / Already logged in once"})
+                    return cors_response({"success": False, "error": "Hibás jelszó / Wrong password"}, 401)
                 mark_logged_in(email)
 
             session["telefon"] = True
@@ -204,7 +204,7 @@ def api_login():
 
         else:
             print("❌ LOGIN FAIL")
-            return jsonify({"success": False, "error": "Hibás jelszó"})
+            return cors_response({"success": False, "error": "Hibás jelszó"}, 401)
 
 @app.route("/projects")
 def projects():
