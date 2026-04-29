@@ -57,7 +57,7 @@ def has_logged_in(email):
     row = cur.fetchone()
     return row and row[0] == "logged_in"
 
-def mark_logged_in(email, ip):
+"""def mark_logged_in(email, ip):
     try:
         c = get_db()
         cur = c.cursor()
@@ -67,7 +67,26 @@ def mark_logged_in(email, ip):
         cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
         c.commit()
     except Exception:
-        c.rollback()
+        c.rollback()"""
+
+def mark_logged_in(email, ip):
+    try:
+        c = get_db()
+        cur = c.cursor()
+        cur.execute("UPDATE befele SET telefon='logged_in' WHERE felh=%s", (email,))
+        try:
+            cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
+        except Exception:
+            c.rollback()
+            c = get_db()
+            cur = c.cursor()
+        c.commit()
+    except Exception as e:
+        print(f"mark_logged_in hiba: {e}")
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
 
 jobs = {}
 
@@ -204,6 +223,7 @@ def api_login():
             session["telefon"] = True
             session["beosztas"] = beosztas
             session["email"] = email
+            session["last_activity"] = time.time()
 
             return cors_response({"success": True})
 
@@ -219,11 +239,23 @@ def projects():
 
 @app.before_request
 def session_timeout():
-    pass  # Session kezelés az aronsoft.hu-n történik
+    # login és statikus route-ok kihagyása
+    if request.endpoint in ("static", "api_login"):
+        return
+
+    if "logged_in" in session:
+        now = time.time()
+
+        if "last_activity" in session:
+            if now - session["last_activity"] > 1800:  # 30 perc
+                session.clear()
+                return jsonify({"error": "session_expired"}), 401
+
+        session["last_activity"] = now
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
 def get_models(brand):
