@@ -53,7 +53,7 @@ init_db()
 def has_logged_in(email):
     c = get_db()
     cur = c.cursor()
-    cur.execute("SELECT loggedin FROM befele WHERE felh=%s", (email,))
+    cur.execute("SELECT jelsz, beosztas, loggedin FROM befele WHERE felh=%s", (email,))
     row = cur.fetchone()
     return row and row[0] == "false"
 
@@ -180,7 +180,7 @@ def api_login():
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute("SELECT jelsz, beosztas FROM befele WHERE felh = %s", (email,))
+        cur.execute("SELECT jelsz, beosztas, loggedin FROM befele WHERE felh = %s", (email,))
         row = cur.fetchone()
     except Exception as e:
         print("DB ERROR:", e)
@@ -199,26 +199,23 @@ def api_login():
     if row:
         stored = row[0]
         beosztas = row[1]
+        loggedin = row[2]
 
-        print("EMAIL:", email)
-        print("INPUT PW:", pw_plain)
-        print("STORED PW:", stored)
+        if loggedin and beosztas != "admin":
+            return cors_response({"success": False, "error": "Ez a felhasználó már be van jelentkezve"}, 403)
 
         try:
             match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
-            print("BCRYPT MATCH:", match)
-        except Exception as e:
-            print("BCRYPT ERROR:", e)
+        except:
             match = (pw_plain == stored)
-            print("PLAIN MATCH:", match)
+            
 
         if match:
-            print("✅ LOGIN OK")            
+            print("✅ LOGIN OK")
 
-            if beosztas != "admin":
-                if has_logged_in(email):
-                    return cors_response({"success": False, "error": "Hibás jelszó / Wrong password"}, 401)
-                mark_logged_in(email, get_user_ip())
+            # 🔥 LOGIN FLAG BEÁLLÍTÁS
+            cur.execute("UPDATE befele SET loggedin = TRUE WHERE felh = %s", (email,))
+            c.commit()
 
             session["loggedin"] = True
             session["beosztas"] = beosztas
@@ -227,31 +224,61 @@ def api_login():
 
             return cors_response({"success": True})
 
-        else:
-            print("❌ LOGIN FAIL")
-            return cors_response({"success": False, "error": "Hibás jelszó"}, 401)
-
 @app.route("/projects")
 def projects():
     if not session.get("loggedin"):
         return redirect("/")
     return render_template("projects.html")
 
+@app.route("/logout")
+def logout():
+    email = session.get("email")
+
+    if email:
+        try:
+            c = get_db()
+            cur = c.cursor()
+
+            # 🔥 DB-ben vissza FALSE-ra
+            cur.execute(
+                "UPDATE befele SET loggedin = FALSE WHERE felh = %s",
+                (email,)
+            )
+            c.commit()
+
+            print("🔓 Logout DB frissítve:", email)
+
+        except Exception as e:
+            print("LOGOUT DB ERROR:", e)
+            try:
+                c.rollback()
+            except:
+                pass
+
+    # 🔥 session törlés
+    session.clear()
+
+    return redirect("/")
+
 @app.before_request
 def session_timeout():
-    # login és statikus route-ok kihagyása
-    if request.endpoint in ("static", "api_login"):
-        return
+    if "last_activity" in session:
+        if time.time() - session["last_activity"] > 1800:
+            email = session.get("email")
 
-    if "false" in session:
-        now = time.time()
+            if email:
+                c = get_db()
+                cur = c.cursor()
+                cur.execute(
+                    "UPDATE befele SET loggedin = FALSE WHERE felh = %s",
+                    (email,)
+                )
+                c.commit()
 
-        if "last_activity" in session:
-            if now - session["last_activity"] > 1800:  # 30 perc
-                session.clear()
-                return jsonify({"error": "session_expired"}), 401
+            session.clear()
+            return redirect("/")
 
-        session["last_activity"] = now
+    session["last_activity"] = time.time()
 
 @app.route("/")
 def index():
