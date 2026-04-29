@@ -53,21 +53,28 @@ init_db()
 def has_logged_in(email):
     c = get_db()
     cur = c.cursor()
-    cur.execute("SELECT telefon FROM befele WHERE felh=%s", (email,))
+    cur.execute("SELECT jelsz, beosztas, loggedin FROM befele WHERE felh=%s", (email,))
     row = cur.fetchone()
-    return row and row[0] == "logged_in"
+    return row and row[0] == "false"
 
 def mark_logged_in(email, ip):
     try:
         c = get_db()
         cur = c.cursor()
-        # Telefon oszlopba írjuk hogy belépett
-        cur.execute("UPDATE befele SET telefon='logged_in' WHERE felh=%s", (email,))
-        # IP naplózás megmarad infó célból
-        cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
+        cur.execute("UPDATE befele SET loggedin='false' WHERE felh=%s", (email,))
+        try:
+            cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
+        except Exception:
+            c.rollback()
+            c = get_db()
+            cur = c.cursor()
         c.commit()
-    except Exception:
-        c.rollback()
+    except Exception as e:
+        print(f"mark_logged_in hiba: {e}")
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
 
 jobs = {}
 
@@ -151,79 +158,91 @@ def api_login():
     data = request.json or {}
 
     email = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").strip().encode("utf-8")
+    password = (data.get("password") or "").strip()
 
     if not email or not password:
-        res = jsonify({"success": False, "error": "Hiányzó adatok"})
-        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
-        return res, 400
+        return cors_response({"success": False, "error": "Hiányzó adatok"}, 400)
 
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute("SELECT jelsz, beosztas FROM befele WHERE felh = %s", (email,))
+        cur.execute("SELECT jelsz, beosztas, loggedin FROM befele WHERE felh = %s", (email,))
         row = cur.fetchone()
     except Exception as e:
         print("DB ERROR:", e)
-        try:
-            get_db().rollback()
-        except Exception:
-            pass
-        res = jsonify({"success": False, "error": "DB hiba"})
-        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
         return cors_response({"success": False, "error": "DB hiba"}, 500)
 
-    pw_plain = password.decode("utf-8").strip()
-    print("EMAIL:", email)
-    print("ROW FOUND:", row is not None)
+    if not row:
+        return cors_response({"success": False, "error": "Nincs ilyen felhasználó"}, 401)
 
-    if row:
-        stored = row[0]
-        beosztas = row[1]
+    stored, beosztas, loggedin = row
 
-        print("EMAIL:", email)
-        print("INPUT PW:", pw_plain)
-        print("STORED PW:", stored)
+    # 🔴 egyszer használható user
+    if beosztas == "test" and loggedin:
+        return cors_response({
+            "success": False,
+            "error": "Ez a fiók már fel lett használva"
+        }, 403)
 
-        try:
-            match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
-            print("BCRYPT MATCH:", match)
-        except Exception as e:
-            print("BCRYPT ERROR:", e)
-            match = (pw_plain == stored)
-            print("PLAIN MATCH:", match)
+    try:
+        match = bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
+    except:
+        match = (password == stored)
 
-        if match:
-            print("✅ LOGIN OK")            
+    if not match:
+        return cors_response({"success": False, "error": "Hibás jelszó"}, 401)
 
-            if beosztas != "admin":
-                if has_logged_in(email):
-                    return cors_response({"success": False, "error": "Hibás jelszó / Wrong password"}, 401)
-                mark_logged_in(email, get_user_ip())
+    print("✅ LOGIN OK")
 
-            session["telefon"] = True
-            session["beosztas"] = beosztas
-            session["email"] = email
+    # 🔥 egyszer használat jelölés
+    if beosztas == "test":
+        cur.execute(
+            "UPDATE befele SET loggedin = TRUE WHERE felh = %s",
+            (email,)
+        )
+        c.commit()
 
-            return cors_response({"success": True})
+    session["loggedin"] = True
+    session["email"] = email
+    session["beosztas"] = beosztas
+    session["last_activity"] = time.time()
 
-        else:
-            print("❌ LOGIN FAIL")
-            return cors_response({"success": False, "error": "Hibás jelszó"}, 401)
+    return cors_response({"success": True})
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
 
 @app.route("/projects")
 def projects():
-    if not session.get("telefon"):
+    if not session.get("loggedin"):
         return redirect("/")
     return render_template("projects.html")
 
 @app.before_request
 def session_timeout():
-    pass  # Session kezelés az aronsoft.hu-n történik
+    if "last_activity" in session:
+        if time.time() - session["last_activity"] > 1800:
+            email = session.get("email")
+
+            if email:
+                c = get_db()
+                cur = c.cursor()
+                cur.execute(
+                    "UPDATE befele SET loggedin = FALSE WHERE felh = %s",
+                    (email,)
+                )
+                c.commit()
+
+            session.clear()
+            return redirect("/")
+
+    session["last_activity"] = time.time()
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", brands=BRANDS, countries=list(COUNTRIES.keys()))
 
 @app.route("/models/<brand>")
 def get_models(brand):
