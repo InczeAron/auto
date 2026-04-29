@@ -53,7 +53,7 @@ init_db()
 def has_logged_in(email):
     c = get_db()
     cur = c.cursor()
-    cur.execute("SELECT telefon FROM befele WHERE felh=%s", (email,))
+    cur.execute("SELECT loggedin FROM befele WHERE felh=%s", (email,))
     row = cur.fetchone()
     return row and row[0] == "logged_in"
 
@@ -62,7 +62,7 @@ def has_logged_in(email):
         c = get_db()
         cur = c.cursor()
         # Telefon oszlopba írjuk hogy belépett
-        cur.execute("UPDATE befele SET telefon='logged_in' WHERE felh=%s", (email,))
+        cur.execute("UPDATE befele SET loggedin='logged_in' WHERE felh=%s", (email,))
         # IP naplózás megmarad infó célból
         cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
         c.commit()
@@ -73,7 +73,7 @@ def mark_logged_in(email, ip):
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute("UPDATE befele SET telefon='logged_in' WHERE felh=%s", (email,))
+        cur.execute("UPDATE befele SET loggedin='logged_in' WHERE felh=%s", (email,))
         try:
             cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
         except Exception:
@@ -220,7 +220,7 @@ def api_login():
                     return cors_response({"success": False, "error": "Hibás jelszó / Wrong password"}, 401)
                 mark_logged_in(email, get_user_ip())
 
-            session["telefon"] = True
+            session["loggedin"] = True
             session["beosztas"] = beosztas
             session["email"] = email
             session["last_activity"] = time.time()
@@ -233,7 +233,7 @@ def api_login():
 
 @app.route("/projects")
 def projects():
-    if not session.get("telefon"):
+    if not session.get("loggedin"):
         return redirect("/")
     return render_template("projects.html")
 
