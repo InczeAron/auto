@@ -55,7 +55,7 @@ def has_logged_in(email):
     cur = c.cursor()
     cur.execute("SELECT loggedin FROM befele WHERE felh=%s", (email,))
     row = cur.fetchone()
-    return row and row[0] == "logged_in"
+    return row and row[0] == "false"
 
 """def mark_logged_in(email, ip):
     try:
@@ -243,7 +243,7 @@ def session_timeout():
     if request.endpoint in ("static", "api_login"):
         return
 
-    if "logged_in" in session:
+    if "false" in session:
         now = time.time()
 
         if "last_activity" in session:
