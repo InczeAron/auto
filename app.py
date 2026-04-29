@@ -73,7 +73,7 @@ def mark_logged_in(email, ip):
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute("UPDATE befele SET loggedin='logged_in' WHERE felh=%s", (email,))
+        cur.execute("UPDATE befele SET loggedin='false' WHERE felh=%s", (email,))
         try:
             cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
         except Exception:
