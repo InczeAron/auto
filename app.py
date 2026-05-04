@@ -670,36 +670,50 @@ def save_to_excel(cars, filepath, brand, model):
             else:
                 cell.font = Font(name="Arial", size=10)
 
-        # Ár értékelés medián alapján
         price_num = car["Ár_num"]
-        eval_cell = ws.cell(row=row, column=7)
-        eval_cell.fill = fill
-        eval_cell.alignment = Alignment(horizontal="center", vertical="center")
-        if median_price > 0 and price_num and price_num > 0:
-            diff_pct = (median_price - price_num) / median_price * 100
-            if diff_pct >= 15:
-                eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
-                eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
-            else:
-                eval_cell.value = ""
-                eval_cell.font = Font(name="Arial", size=10)
+    eval_cell = ws.cell(row=row, column=7)
+    eval_cell.fill = fill
+    eval_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    year_median = None
+
+    # 🔍 év kinyerése
+    details = car.get("Részletek", "")
+    yr_match = re.search(r'\b(20\d{2})\b', details)
+
+    if yr_match:
+        yr = yr_match.group(1)
+        year_median = medians_by_year.get(yr)
+
+    # 🔥 HA VAN év medián → AZT HASZNÁLJUK
+    base_median = year_median if year_median else median_price
+
+    if base_median > 0 and price_num and price_num > 0:
+        diff_pct = (base_median - price_num) / base_median * 100
+
+        if diff_pct >= 15:
+            eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
+            eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
         else:
             eval_cell.value = ""
             eval_cell.font = Font(name="Arial", size=10)
+    else:
+        eval_cell.value = ""
+        eval_cell.font = Font(name="Arial", size=10)
 
-    # Medián sor
-    median_row = len(cars) + 2
-    med_fill = PatternFill("solid", start_color="1F3864")
-    lbl = ws.cell(row=median_row, column=2, value="Medián ár / Median Price:")
-    lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    lbl.fill = med_fill
-    lbl.alignment = Alignment(horizontal="right", vertical="center")
-    v = ws.cell(row=median_row, column=3, value=f"{median_price:,.0f}".replace(",", ".") + " €" if median_price else "–")
-    v.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    v.fill = med_fill
-    v.alignment = Alignment(horizontal="center", vertical="center")
-    for col in [1, 4, 5, 6, 7]:
-        ws.cell(row=median_row, column=col).fill = med_fill
+        # Medián sor
+        median_row = len(cars) + 2
+        med_fill = PatternFill("solid", start_color="1F3864")
+        lbl = ws.cell(row=median_row, column=2, value="Medián ár / Median Price:")
+        lbl.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+        lbl.fill = med_fill
+        lbl.alignment = Alignment(horizontal="right", vertical="center")
+        v = ws.cell(row=median_row, column=3, value=f"{median_price:,.0f}".replace(",", ".") + " €" if median_price else "–")
+        v.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+        v.fill = med_fill
+        v.alignment = Alignment(horizontal="center", vertical="center")
+        for col in [1, 4, 5, 6, 7]:
+            ws.cell(row=median_row, column=col).fill = med_fill
 
     # Évjárat szerinti mediánok
     if medians_by_year:
