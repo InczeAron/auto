@@ -680,7 +680,15 @@ def save_to_excel(cars, filepath, brand, model):
         eval_cell.alignment = Alignment(horizontal="center", vertical="center")
 
         # 🔍 normális év regex
-        yr_match = re.search(r"\b(20\d{2})\b", car.get("Részletek", ""))
+        details = car.get("Részletek", "")
+        yr_match = re.search(r"(20\d{2})", details)
+
+        year_median = None
+        if yr_match:
+            yr = yr_match.group(1)
+            year_median = medians_by_year.get(yr)
+
+        base_median = year_median if year_median is not None else median_price
 
         year_median = None
         if yr_match:
