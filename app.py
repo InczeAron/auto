@@ -669,21 +669,30 @@ def save_to_excel(cars, filepath, brand, model):
                 cell.font = Font(name="Arial", size=10, color="0563C1", underline="single")
             else:
                 cell.font = Font(name="Arial", size=10)
+            # Ár értékelés – évjárat szerinti medián alapján
+            price_num = car["Ár_num"]
+            eval_cell = ws.cell(row=row, column=7)
+            eval_cell.fill = fill
+            eval_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        price_num = car["Ár_num"]
-    eval_cell = ws.cell(row=row, column=7)
-    eval_cell.fill = fill
-    eval_cell.alignment = Alignment(horizontal="center", vertical="center")
+            # Évjárat kinyerése → év szerinti medián, ha nincs → globális medián
+            year_median = None
+            yr_match = re.search(r'\b(20\d{2})\b', car.get("Részletek", ""))
+            if yr_match:
+                year_median = medians_by_year.get(yr_match.group(1))
+            base_median = year_median if year_median else median_price
 
-    year_median = None
-
-    # 🔍 év kinyerése
-    details = car.get("Részletek", "")
-    yr_match = re.search(r'\b(20\d{2})\b', details)
-
-    if yr_match:
-        yr = yr_match.group(1)
-        year_median = medians_by_year.get(yr)
+            if base_median > 0 and price_num and price_num > 0:
+                diff_pct = (base_median - price_num) / base_median * 100
+                if diff_pct >= 15:
+                    eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
+                    eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
+                else:
+                    eval_cell.value = ""
+                    eval_cell.font = Font(name="Arial", size=10)
+            else:
+                eval_cell.value = ""
+                eval_cell.font = Font(name="Arial", size=10)
 
     # 🔥 HA VAN év medián → AZT HASZNÁLJUK
     base_median = year_median if year_median else median_price
