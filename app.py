@@ -686,6 +686,7 @@ def save_to_excel(cars, filepath, brand, model):
                 diff_pct = (base_median - price_num) / base_median * 100
                 if diff_pct >= 15:
                     eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
+                    print(f"DEBUG: ár={price_num}, részletek='{car.get('Részletek','')}', yr={yr_match.group(1) if yr_match else 'NINCS'}, base_median={base_median}")
                     eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
                 else:
                     eval_cell.value = ""
