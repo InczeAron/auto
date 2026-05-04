@@ -53,9 +53,21 @@ init_db()
 def has_logged_in(email):
     c = get_db()
     cur = c.cursor()
-    cur.execute("SELECT jelsz, beosztas, loggedin FROM befele WHERE felh=%s", (email,))
+    cur.execute("SELECT loggedin FROM befele WHERE felh=%s", (email,))
     row = cur.fetchone()
     return row and row[0] == "false"
+
+"""def mark_logged_in(email, ip):
+    try:
+        c = get_db()
+        cur = c.cursor()
+        # Telefon oszlopba írjuk hogy belépett
+        cur.execute("UPDATE befele SET loggedin='logged_in' WHERE felh=%s", (email,))
+        # IP naplózás megmarad infó célból
+        cur.execute("INSERT INTO used_ips (ip, user_email) VALUES (%s, %s)", (ip, email))
+        c.commit()
+    except Exception:
+        c.rollback()"""
 
 def mark_logged_in(email, ip):
     try:
@@ -158,61 +170,66 @@ def api_login():
     data = request.json or {}
 
     email = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").strip()
+    password = (data.get("password") or "").strip().encode("utf-8")
 
     if not email or not password:
-        return cors_response({"success": False, "error": "Hiányzó adatok"}, 400)
+        res = jsonify({"success": False, "error": "Hiányzó adatok"})
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
+        return res, 400
 
     try:
         c = get_db()
         cur = c.cursor()
-        cur.execute("SELECT jelsz, beosztas, loggedin FROM befele WHERE felh = %s", (email,))
+        cur.execute("SELECT jelsz, beosztas FROM befele WHERE felh = %s", (email,))
         row = cur.fetchone()
     except Exception as e:
         print("DB ERROR:", e)
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
+        res = jsonify({"success": False, "error": "DB hiba"})
+        res.headers["Access-Control-Allow-Origin"] = get_cors_origin()
         return cors_response({"success": False, "error": "DB hiba"}, 500)
 
-    if not row:
-        return cors_response({"success": False, "error": "Nincs ilyen felhasználó"}, 401)
+    pw_plain = password.decode("utf-8").strip()
+    print("EMAIL:", email)
+    print("ROW FOUND:", row is not None)
 
-    stored, beosztas, loggedin = row
+    if row:
+        stored = row[0]
+        beosztas = row[1]
 
-    # 🔴 egyszer használható user
-    if beosztas == "test" and loggedin:
-        return cors_response({
-            "success": False,
-            "error": "Ez a fiók már fel lett használva"
-        }, 403)
+        print("EMAIL:", email)
+        print("INPUT PW:", pw_plain)
+        print("STORED PW:", stored)
 
-    try:
-        match = bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
-    except:
-        match = (password == stored)
+        try:
+            match = bcrypt.checkpw(pw_plain.encode("utf-8"), stored.encode("utf-8"))
+            print("BCRYPT MATCH:", match)
+        except Exception as e:
+            print("BCRYPT ERROR:", e)
+            match = (pw_plain == stored)
+            print("PLAIN MATCH:", match)
 
-    if not match:
-        return cors_response({"success": False, "error": "Hibás jelszó"}, 401)
+        if match:
+            print("✅ LOGIN OK")            
 
-    print("✅ LOGIN OK")
+            if beosztas != "admin":
+                if has_logged_in(email):
+                    return cors_response({"success": False, "error": "Hibás jelszó / Wrong password"}, 401)
+                mark_logged_in(email, get_user_ip())
 
-    # 🔥 egyszer használat jelölés
-    if beosztas == "test":
-        cur.execute(
-            "UPDATE befele SET loggedin = TRUE WHERE felh = %s",
-            (email,)
-        )
-        c.commit()
+            session["loggedin"] = True
+            session["beosztas"] = beosztas
+            session["email"] = email
+            session["last_activity"] = time.time()
 
-    session["loggedin"] = True
-    session["email"] = email
-    session["beosztas"] = beosztas
-    session["last_activity"] = time.time()
+            return cors_response({"success": True})
 
-    return cors_response({"success": True})
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/")
+        else:
+            print("❌ LOGIN FAIL")
+            return cors_response({"success": False, "error": "Hibás jelszó"}, 401)
 
 @app.route("/projects")
 def projects():
@@ -222,23 +239,19 @@ def projects():
 
 @app.before_request
 def session_timeout():
-    if "last_activity" in session:
-        if time.time() - session["last_activity"] > 1800:
-            email = session.get("email")
+    # login és statikus route-ok kihagyása
+    if request.endpoint in ("static", "api_login"):
+        return
 
-            if email:
-                c = get_db()
-                cur = c.cursor()
-                cur.execute(
-                    "UPDATE befele SET loggedin = FALSE WHERE felh = %s",
-                    (email,)
-                )
-                c.commit()
+    if "false" in session:
+        now = time.time()
 
-            session.clear()
-            return redirect("/")
+        if "last_activity" in session:
+            if now - session["last_activity"] > 1800:  # 30 perc
+                session.clear()
+                return jsonify({"error": "session_expired"}), 401
 
-    session["last_activity"] = time.time()
+        session["last_activity"] = now
 
 @app.route("/")
 def index():
@@ -631,7 +644,6 @@ def save_to_excel(cars, filepath, brand, model):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 22
 
-    # Medián számítás Ár_num alapján
     def calc_median(prices):
         s = sorted([p for p in prices if p])
         n = len(s)
@@ -639,6 +651,7 @@ def save_to_excel(cars, filepath, brand, model):
             return 0
         return s[n // 2] if n % 2 == 1 else (s[n // 2 - 1] + s[n // 2]) / 2
 
+    # Globális medián
     valid_prices = [c["Ár_num"] for c in cars if c["Ár_num"]]
     median_price = calc_median(valid_prices)
 
@@ -647,25 +660,19 @@ def save_to_excel(cars, filepath, brand, model):
     for c in cars:
         if not c.get("Ár_num"):
             continue
-        # Részletekből évjárat kinyerése pl. "01/2022"
-        details = c.get("Részletek", "")
-        yr_match = re.search(r'(20\d{2})', details)
+        yr_match = re.search(r"(20\d{2})", c.get("Részletek", ""))
         if yr_match:
-            yr = yr_match.group(1)
-            by_year.setdefault(yr, []).append(c["Ár_num"])
-    medians_by_year = {yr: calc_median(prices) for yr, prices in by_year.items()}
+            by_year.setdefault(yr_match.group(1), []).append(c["Ár_num"])
+    medians_by_year = {yr: calc_median(p) for yr, p in by_year.items()}
 
     for i, car in enumerate(cars, 1):
         row = i + 1
         fill = PatternFill("solid", start_color="DCE6F1" if i % 2 == 0 else "FFFFFF")
-
         values = [i, car["Cím"], car["Ár"], car["Részletek"], car["Helyszín"], car["Link"]]
-
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
             cell.fill = fill
             cell.alignment = Alignment(vertical="center")
-
             if col == 6 and val:
                 cell.hyperlink = val
                 cell.value = "Open"
@@ -673,32 +680,18 @@ def save_to_excel(cars, filepath, brand, model):
             else:
                 cell.font = Font(name="Arial", size=10)
 
-        # ✅ EZ MÁR A COL LOOPON KÍVÜL VAN
+        # Ár értékelés – évjárat szerinti medián alapján
         price_num = car["Ár_num"]
         eval_cell = ws.cell(row=row, column=7)
         eval_cell.fill = fill
         eval_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        # 🔍 normális év regex
-        details = car.get("Részletek", "")
-        yr_match = re.search(r"(20\d{2})", details)
-
-        year_median = None
-        if yr_match:
-            yr = yr_match.group(1)
-            year_median = medians_by_year.get(yr)
-
-        base_median = year_median if year_median is not None else median_price
-
-        year_median = None
-        if yr_match:
-            year_median = medians_by_year.get(yr_match.group(1))
-
+        yr_match = re.search(r"(20\d{2})", car.get("Részletek", ""))
+        year_median = medians_by_year.get(yr_match.group(1)) if yr_match else None
         base_median = year_median if year_median else median_price
 
         if base_median > 0 and price_num and price_num > 0:
             diff_pct = (base_median - price_num) / base_median * 100
-
             if diff_pct >= 15:
                 eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
                 eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
@@ -709,23 +702,7 @@ def save_to_excel(cars, filepath, brand, model):
             eval_cell.value = ""
             eval_cell.font = Font(name="Arial", size=10)
 
-        # 🔥 HA VAN év medián → AZT HASZNÁLJUK
-        base_median = year_median if year_median else median_price
-
-        if base_median > 0 and price_num and price_num > 0:
-            diff_pct = (base_median - price_num) / base_median * 100
-
-            if diff_pct >= 15:
-                eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
-                eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
-            else:
-                eval_cell.value = ""
-                eval_cell.font = Font(name="Arial", size=10)
-        else:
-            eval_cell.value = ""
-            eval_cell.font = Font(name="Arial", size=10)
-
-    # Medián sor
+    # Medián sor – for cikluson KÍVÜL
     median_row = len(cars) + 2
     med_fill = PatternFill("solid", start_color="1F3864")
     lbl = ws.cell(row=median_row, column=2, value="Medián ár / Median Price:")
@@ -760,6 +737,7 @@ def save_to_excel(cars, filepath, brand, model):
         ws.column_dimensions[ws.cell(1, col).column_letter].width = width
     ws.freeze_panes = "A2"
     wb.save(filepath)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
