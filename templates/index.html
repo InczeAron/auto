@@ -297,7 +297,14 @@ function showResults(cars, brand, model) {
 
   const rows = cars.map((c, i) => {
     const p = c["Ár_num"] || 0;
-    const diff = median > 0 && p > 0 ? (median - p) / median * 100 : 0;
+    
+    // Évjárat szerinti medián használata
+    const details = c["Részletek"] || "";
+    const yrMatch = details.match(/\b(20\d{2})\b/);
+    const yearMedian = yrMatch ? mediansByYear[yrMatch[1]] : null;
+    const baseMedian = yearMedian || median;
+    
+    const diff = baseMedian > 0 && p > 0 ? (baseMedian - p) / baseMedian * 100 : 0;
     const badge = diff >= 15 ? `<span class="cheaper">✅ ${diff.toFixed(0)}% cheaper</span>` : "";
     return `<tr>
       <td>${i+1}</td>

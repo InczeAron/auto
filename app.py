@@ -675,9 +675,8 @@ def save_to_excel(cars, filepath, brand, model):
             eval_cell.fill = fill
             eval_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-            # Évjárat kinyerése → év szerinti medián, ha nincs → globális medián
             year_median = None
-            yr_match = re.search(r'\b(20\d{2})\b', car.get("Részletek", ""))
+            yr_match = re.search(r'(20\d{2})', car.get("Részletek", ""))
             if yr_match:
                 year_median = medians_by_year.get(yr_match.group(1))
             base_median = year_median if year_median else median_price
@@ -686,7 +685,6 @@ def save_to_excel(cars, filepath, brand, model):
                 diff_pct = (base_median - price_num) / base_median * 100
                 if diff_pct >= 15:
                     eval_cell.value = f"✅ {diff_pct:.0f}% cheaper"
-                    print(f"DEBUG: ár={price_num}, részletek='{car.get('Részletek','')}', yr={yr_match.group(1) if yr_match else 'NINCS'}, base_median={base_median}")
                     eval_cell.font = Font(name="Arial", size=10, bold=True, color="1A7A4A")
                 else:
                     eval_cell.value = ""
