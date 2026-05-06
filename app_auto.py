@@ -315,7 +315,7 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
 
 # =========================
-# MAIN
+# MAIN alap
 # =========================
 def run_scraper():
     print("🚀 SCRAPER START")
