@@ -99,6 +99,8 @@ BRANDS = {
     "Volvo":      ["S40","S60","S80","V40","V60","V90","XC40","XC60","XC90"],
     "Porsche":    ["911","Cayenne","Macan","Panamera","Taycan","Boxster","Cayman"],
     "Alfa Romeo": ["147","156","159","Giulia","Stelvio","MiTo","Giulietta"],
+    "Aston Martin": ["AR1","Cygnet","DB","DB11","DB12","DB7","DB9","Lagonda","Valhalla","Valkyrie","Vantage"],
+    
 }
 
 COUNTRIES = {
