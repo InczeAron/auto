@@ -333,14 +333,14 @@ def run_scraper():
             "dealer_id": "dealer1",
             "emails": ["aronincze@aronsoft.hu"],
             "searches": [
-                {"brand": "honda", "model": "jazz",           "year_from": 2020, "year_to": 2026, "country": "A"},
+                {"brand": "audi", "model": "a6",           "year_from": 2024, "year_to": 2026, "country": "A"},
             ]
         },
         {
             "dealer_id": "dealer2",
             "emails": ["inczearon@gmail.com"],
             "searches": [
-                {"brand": "bmw",        "model": "x1",   "year_from": 2020, "year_to": 2026, "country": "D"},
+                {"brand": "mercedes-benz",        "model": "gla",   "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
         {
