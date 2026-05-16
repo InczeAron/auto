@@ -60,6 +60,7 @@ def save_seen(dealer_id, car_ids):
 # =========================
 def send_email(subject, body, to_email, attachment=None, html=False):
     sender = os.environ.get("EMAIL_USER")
+    print("EMAIL_USER:", sender)
     password = os.environ.get("EMAIL_PASS")
 
     msg = EmailMessage()
