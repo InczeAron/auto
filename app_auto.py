@@ -86,8 +86,12 @@ def send_email(subject, body, to_email, attachment=None, html=False):
                 filename=os.path.basename(attachment)
             )
 
-    with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+    """with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
         smtp.starttls()
+        smtp.login(sender, password)
+        smtp.send_message(msg)"""
+    
+    with smtplib.SMTP_SSL("smtp.forpsi.com", 465) as smtp:
         smtp.login(sender, password)
         smtp.send_message(msg)
 
