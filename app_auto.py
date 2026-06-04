@@ -244,6 +244,29 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         except Exception:
             pass
 
+        print("URL:", page.url)
+        print("HTML LEN:", len(page.content()))
+
+        articles = page.locator("article").all()
+
+        print("ARTICLE COUNT:", len(articles))
+
+        if len(articles) == 0:
+            page.screenshot(path="debug.png")
+            with open("debug.html", "w", encoding="utf-8") as f:
+                f.write(page.content())
+
+        print("URL:", page.url)
+
+        html = page.content()
+
+        print("HTML SIZE:", len(html))
+
+        with open("debug.html", "w", encoding="utf-8") as f:
+            f.write(html)
+
+        page.screenshot(path="debug.png")
+
         articles = page.locator("article").all()
         if not articles:
             print("  ⛔ Nincs találat")
