@@ -144,6 +144,12 @@ def save_to_excel(cars, filename):
         deal_cell = ws.cell(row=row, column=9)
         deal_cell.font = Font(color=color, bold=True)
 
+        link = car.get("Link")
+        print("LINK:", link)
+
+        car_id = link.rstrip("/").split("/")[-1]
+        print("CAR_ID:", car_id)
+
     widths = [5, 50, 15, 12, 12, 12, 20, 8, 15]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[ws.cell(1, i).column_letter].width = w
