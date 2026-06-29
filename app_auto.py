@@ -529,10 +529,13 @@ def run_scraper():
 
             print(f"\n📬 New cars ({dealer_id}): {len(all_new_cars)}")
 
+            # 🔥 MINDIG MENTSD EL AZ ÚJ ID-KAT!
+            save_seen(dealer_id, all_new_ids)
+
             if not all_new_cars:
                 send_email(
                     subject=f"🚗 AutoScout – {dealer_id} – nincs új autó / no new car",
-                    body="A mai futás során nem találtunk új hirdetéseket. / We didn't find any new ads during today's run.",
+                    body="...",
                     to_email=emails
                 )
                 continue
