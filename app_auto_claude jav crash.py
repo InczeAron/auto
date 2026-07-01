@@ -24,7 +24,8 @@ def init_db():
             id SERIAL PRIMARY KEY,
             dealer_id TEXT,
             car_id TEXT,
-            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(dealer_id, car_id)
         )
     """)
     conn.commit()
@@ -66,7 +67,6 @@ def send_email(subject, body, to_email, attachment=None, html=False):
     msg["Subject"] = subject
     msg["From"] = sender
 
-    # to_email lehet string vagy lista
     if isinstance(to_email, list):
         msg["To"] = ", ".join(to_email)
     else:
@@ -86,11 +86,6 @@ def send_email(subject, body, to_email, attachment=None, html=False):
                 filename=os.path.basename(attachment)
             )
 
-    """with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
-        smtp.starttls()
-        smtp.login(sender, password)
-        smtp.send_message(msg)"""
-    
     with smtplib.SMTP_SSL("smtp.forpsi.com", 465) as smtp:
         smtp.login(sender, password)
         smtp.send_message(msg)
@@ -144,12 +139,6 @@ def save_to_excel(cars, filename):
         deal_cell = ws.cell(row=row, column=9)
         deal_cell.font = Font(color=color, bold=True)
 
-        link = car.get("Link")
-        print("LINK:", link)
-
-        car_id = link.rstrip("/").split("/")[-1]
-        print("CAR_ID:", car_id)
-
     widths = [5, 50, 15, 12, 12, 12, 20, 8, 15]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[ws.cell(1, i).column_letter].width = w
@@ -186,8 +175,7 @@ def build_email_html(cars, medians, search_label=""):
             <td style="color:{color};font-weight:bold;">{text}</td>
         </tr>"""
     html += "</table>"
-    
-     # 🔥 MEDIÁN RÉSZ
+
     if medians:
         html += "<br><h3>📊 Median prices by year</h3><ul>"
         for year, median in sorted(medians.items(), reverse=True):
@@ -195,7 +183,6 @@ def build_email_html(cars, medians, search_label=""):
         html += "</ul>"
 
     html += "</body></html>"
-
     return html
 
 
@@ -232,12 +219,11 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             print("  ❌ Oldal nem tölt be")
             break
 
-        html_len = len(page.content())
-        if html_len < 5000:
+        if len(page.content()) < 5000:
             print("  ⛔ Valószínű CAPTCHA/block")
             break
 
-        # Cookie
+        # Cookie elfogadás
         try:
             btn = page.locator("button:has-text('Accept')").first
             if btn.is_visible(timeout=2000):
@@ -250,30 +236,8 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         except Exception:
             pass
 
-        print("URL:", page.url)
-        print("HTML LEN:", len(page.content()))
-
         articles = page.locator("article").all()
 
-        print("ARTICLE COUNT:", len(articles))
-
-        if len(articles) == 0:
-            page.screenshot(path="debug.png")
-            with open("debug.html", "w", encoding="utf-8") as f:
-                f.write(page.content())
-
-        print("URL:", page.url)
-
-        html = page.content()
-
-        print("HTML SIZE:", len(html))
-
-        with open("debug.html", "w", encoding="utf-8") as f:
-            f.write(html)
-
-        page.screenshot(path="debug.png")
-
-        articles = page.locator("article").all()
         if not articles:
             print("  ⛔ Nincs találat")
             break
@@ -286,12 +250,16 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                 price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000).strip()
                 price_num = extract_price(price_text)
 
+                # LINK - /offers/ path keresés
                 link = ""
                 try:
-                    href = article.locator("a[href*='/offers/']").first.get_attribute("href", timeout=500)
-                    if href:
-                        link = "https://www.autoscout24.com" + href if href.startswith("/") else href
-                        link = link.split("?")[0]
+                    all_as = article.locator("a").all()
+                    for a in all_as:
+                        href = a.get_attribute("href") or ""
+                        if "/offers/" in href:
+                            link = ("https://www.autoscout24.com" + href) if href.startswith("/") else href
+                            link = link.split("?")[0]
+                            break
                 except Exception:
                     pass
 
@@ -318,8 +286,6 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                     spans = article.locator("span").all()
                     for s in spans:
                         txt = s.inner_text(timeout=200).strip()
-
-                        # pl: "DE-12345 Berlin"
                         if re.search(r"[A-Z]{2}-\d{4,5}", txt):
                             location = txt
                             break
@@ -327,16 +293,16 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                     location = ""
 
                 cars.append({
-                    "Sorszám": len(cars) + 1,
-                    "Cím":     title,
-                    "Ár":      f"{price_num:,} €".replace(",", ".") if price_num else price_text,
-                    "Ár_num":  price_num,
-                    "Km":      km,
-                    "Év":      year,
+                    "Sorszám":   len(cars) + 1,
+                    "Cím":       title,
+                    "Ár":        f"{price_num:,} €".replace(",", ".") if price_num else price_text,
+                    "Ár_num":    price_num,
+                    "Km":        km,
+                    "Év":        year,
                     "Üzemanyag": fuel,
                     "Helyszín":  location,
-                    "Link":    link,
-                    "Pontszám": 0
+                    "Link":      link,
+                    "Pontszám":  0
                 })
 
             except Exception:
@@ -348,7 +314,7 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
 
 # =========================
-# MAIN alap
+# MAIN
 # =========================
 def run_scraper():
     print("🚀 SCRAPER START")
@@ -359,14 +325,8 @@ def run_scraper():
             "dealer_id": "dealer1",
             "emails": ["aronincze@aronsoft.hu"],
             "searches": [
-                {"brand": "bmw",   "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
-            ]
-        },
-        {
-            "dealer_id": "dealer1",
-            "emails": ["aronincze@aronsoft.hu"],
-            "searches": [
-                {"brand": "audi", "model": "a6", "year_from": 2024, "year_to": 2026, "country": "A"},
+                {"brand": "bmw",  "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
+                {"brand": "audi", "model": "a6",             "year_from": 2024, "year_to": 2026, "country": "A"},
             ]
         },
         {
@@ -374,18 +334,11 @@ def run_scraper():
             "emails": ["inczearon@gmail.com"],
             "searches": [
                 {"brand": "mercedes-benz", "model": "gla-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
-            ]
-        },
-        {
-            "dealer_id": "dealer2",
-            "emails": ["inczearon@gmail.com"],
-            "searches": [
-                {"brand": "volkswagen", "model": "golf", "year_from": 2024, "year_to": 2026, "country": "D"},
+                {"brand": "volkswagen",    "model": "golf",      "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
     ]
 
-    from playwright.sync_api import sync_playwright
     import random
 
     USER_AGENTS = [
@@ -400,8 +353,6 @@ def run_scraper():
                   "--no-sandbox", "--disable-dev-shm-usage"]
         )
 
-        all_medians = {}
-
         for dealer in dealers:
             dealer_id = dealer["dealer_id"]
             emails    = dealer["emails"]
@@ -409,28 +360,25 @@ def run_scraper():
             print(f"\n{'='*40}")
             print(f"🏢 Dealer: {dealer_id}")
 
-            # 🔥 ÚJ CONTEXT DEALERENKÉNT
             context = browser.new_context(
                 user_agent=random.choice(USER_AGENTS),
                 viewport={"width": 1280, "height": 800},
                 locale="de-DE"
             )
-
             context.add_init_script(
                 "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
             )
 
-            seen = load_seen(dealer_id)
-
+            seen        = load_seen(dealer_id)
             all_new_cars = []
             all_new_ids  = []
+            all_medians  = {}
 
             for search in dealer["searches"]:
                 label = f"{search['brand']} {search['model']} ({search['country']})"
                 print(f"\n🔍 Keresés: {label}")
 
                 page = context.new_page()
-
                 cars = scrape_search(
                     page,
                     search["brand"],
@@ -439,74 +387,43 @@ def run_scraper():
                     search["year_to"],
                     search["country"]
                 )
-
                 page.close()
 
                 print(f"  🎯 Összesen: {len(cars)} autó")
 
-                if len(cars) == 0:
-                    print("  ⚠️ NINCS TALÁLAT (block vagy selector hiba)")
+                if not cars:
+                    print("  ⚠️ NINCS TALÁLAT")
+                    continue
 
-                # Átlag + pontszám
-                """valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
-                avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
-
-                for c in cars:
-                    if c.get("Ár_num") and avg_price:
-                        c["Pontszám"] = round((avg_price - c["Ár_num"]) / avg_price * 100)
-                        c["Átlag"] = avg_price   # 🔥 új"""
-                
-                #csoportosítás év szerint
+                # Medián számítás évente
                 cars_by_year = {}
-
                 for c in cars:
-                    year = c.get("Év")
+                    year  = c.get("Év")
                     price = c.get("Ár_num")
-
                     if not year or not price:
                         continue
-
-                    # pl: "03/2024" → "2024"
                     year_only = year.split("/")[-1]
+                    cars_by_year.setdefault(year_only, []).append(price)
 
-                    if year_only not in cars_by_year:
-                        cars_by_year[year_only] = []
-
-                    cars_by_year[year_only].append(price)
-
-                #medián számítás évente
                 medians = {}
-
                 for year, prices in cars_by_year.items():
                     prices = sorted(prices)
                     n = len(prices)
+                    medians[year] = prices[n // 2] if n % 2 == 1 else (prices[n//2 - 1] + prices[n//2]) / 2
 
-                    if n == 0:
-                        continue
+                all_medians.update(medians)
 
-                    if n % 2 == 1:
-                        median = prices[n // 2]
-                    else:
-                        median = (prices[n//2 - 1] + prices[n//2]) / 2
-
-                    medians[year] = median
-
-                    all_medians.update(medians)
-
-                #pontszám számítás (évente)
+                # Pontszám
                 for c in cars:
-                    year = c.get("Év")
+                    year  = c.get("Év")
                     price = c.get("Ár_num")
-
                     if not year or not price:
                         continue
-
                     year_only = year.split("/")[-1]
                     median = medians.get(year_only)
-
                     if median:
                         c["Pontszám"] = round((median - price) / median * 100)
-                        c["Medián"] = median  # extra debug/info  
+                        c["Medián"]   = median
 
                 # Új autók szűrése
                 for car in cars:
@@ -514,55 +431,48 @@ def run_scraper():
                     if not link:
                         continue
 
+                    # car_id = az URL utolsó szegmense
                     car_id = link.rstrip("/").split("/")[-1]
 
-                    if not car_id or len(car_id) < 10:
+                    if not car_id or len(car_id) < 3:
                         continue
 
                     if car_id not in seen:
-                        seen.add(car_id)  # 🔥 KRITIKUS FIX
+                        seen.add(car_id)
                         car["Keresés"] = label
                         all_new_cars.append(car)
                         all_new_ids.append(car_id)
 
-            context.close()  # 🔥 FONTOS
+            context.close()
 
             print(f"\n📬 New cars ({dealer_id}): {len(all_new_cars)}")
 
-            # 🔥 MINDIG MENTSD EL AZ ÚJ ID-KAT!
+            # MINDIG MENTSD - akár van új akár nem
             save_seen(dealer_id, all_new_ids)
 
             if not all_new_cars:
                 send_email(
-                    subject=f"🚗 AutoScout – {dealer_id} – nincs új autó / no new car",
-                    body="...",
+                    subject=f"🚗 AutoScout – {dealer_id} – nincs új autó",
+                    body="A mai futás során nem találtunk új hirdetéseket.",
                     to_email=emails
                 )
                 continue
 
             # Rendezés
             all_new_cars.sort(
-                key=lambda x: (
-                    parse_date(x.get("Év")),          # 1️⃣ év+hónap
-                    x.get("Pontszám") or -999         # 2️⃣ deal
-                ),
+                key=lambda x: (parse_date(x.get("Év")), x.get("Pontszám") or -999),
                 reverse=True
             )
 
-            # Sorszám újra
             for i, c in enumerate(all_new_cars, 1):
                 c["Sorszám"] = i
 
             # Excel
-            filename = f"{dealer_id}_{search['brand']}.xlsx" #f"{dealer_id}.xlsx"
+            filename = f"{dealer_id}.xlsx"
             save_to_excel(all_new_cars, filename)
-
-            # DB mentés
-            save_seen(dealer_id, all_new_ids)
 
             # Email
             email_html = build_email_html(all_new_cars, all_medians, dealer_id)
-
             send_email(
                 subject=f"🚗 {len(all_new_cars)} új autó – {dealer_id}",
                 body=email_html,
