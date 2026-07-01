@@ -511,12 +511,17 @@ def run_scraper():
                 # Új autók szűrése
                 for car in cars:
                     link = car.get("Link")
+                    print("LINK:", link)
                     if not link:
                         continue
 
                     car_id = link.rstrip("/").split("/")[-1]
+                    print("CAR_ID:", car_id)
+
+                    print("SEEN:", car_id in seen)
 
                     if not car_id or len(car_id) < 10:
+                        print("SKIP: short id")
                         continue
 
                     if car_id not in seen:
