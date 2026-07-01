@@ -250,6 +250,15 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         except Exception:
             pass
 
+        # Az első article után rögtön:
+        for article in articles[:2]:
+            all_hrefs = article.locator("a").all()
+            for a in all_hrefs:
+                href = a.get_attribute("href") or ""
+                if href:
+                    print(f"   🔗 href: {href[:80]}")
+            break
+
         print("URL:", page.url)
         print("HTML LEN:", len(page.content()))
 
@@ -287,9 +296,18 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                 price_num = extract_price(price_text)
 
                 link = ""
-                try:
+                """try:
                     href = article.locator("a[href*='/offers/']").first.get_attribute("href", timeout=500)
                     if href:
+                        link = "https://www.autoscout24.com" + href if href.startswith("/") else href
+                        link = link.split("?")[0]
+                except Exception:
+                    pass"""
+                
+                # CSERE - /offers/ helyett bármilyen autó link
+                try:
+                    href = article.locator("a").first.get_attribute("href", timeout=500)
+                    if href and ("/offers/" in href or "/annonces/" in href or "/angebote/" in href):
                         link = "https://www.autoscout24.com" + href if href.startswith("/") else href
                         link = link.split("?")[0]
                 except Exception:
