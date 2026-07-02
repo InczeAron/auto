@@ -145,7 +145,11 @@ def save_to_excel(cars, filename):
         deal_cell.font = Font(color=color, bold=True)
 
         link = car.get("Link")
-        print("LINK:", link)
+        if link:
+            print("LINK:", link)
+            print("CAR_ID:", link.rstrip("/").split("/")[-1])
+        else:
+            print("LINK HIÁNYZIK")
 
         car_id = link.rstrip("/").split("/")[-1]
         print("CAR_ID:", car_id)
@@ -262,6 +266,11 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             print(a.get_attribute("href"))
 
         print("ARTICLE COUNT:", len(articles))
+
+        print("Összes href az első article-ben:")
+
+        for a in articles[0].locator("a").all():
+            print(a.get_attribute("href"))
 
         if len(articles) == 0:
             page.screenshot(path="debug.png")
