@@ -255,6 +255,11 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         articles = page.locator("article").all()
 
+        print("Összes href az első article-ben:")
+
+        for a in articles[0].locator("a").all():
+            print(a.get_attribute("href"))
+
         print("ARTICLE COUNT:", len(articles))
 
         if len(articles) == 0:
