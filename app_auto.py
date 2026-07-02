@@ -228,8 +228,9 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         try:
             page.goto(url, timeout=25000)
-        except Exception:
-            print("  ❌ Oldal nem tölt be")
+        except Exception as e:
+            print("❌ page.goto() hiba:")
+            print(e)
             break
 
         html_len = len(page.content())
