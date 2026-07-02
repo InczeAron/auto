@@ -258,6 +258,16 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         print("URL:", page.url)
         print("HTML LEN:", len(page.content()))
 
+        if page_num == 1:
+            links = articles[0].locator("a").evaluate_all("""
+        els => els.map(e => ({
+            href: e.href,
+            text: e.textContent
+        }))
+        """)
+
+            print(links)
+
         articles = page.locator("article").all()
 
         print("Összes href az első article-ben:")
