@@ -275,7 +275,7 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             role: e.getAttribute("role"),
             tabIndex: e.getAttribute("tabindex")
         })
-        """))
+        """))      
 
         print(article.locator("*").evaluate_all("""
         els => els
@@ -289,7 +289,28 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             .map(e => e.getAttribute("href"))
         """))
 
-        
+        with open("article.html", "w", encoding="utf-8") as f:
+            f.write(article.evaluate("e => e.outerHTML"))
+
+        if len(articles) > 0 and page_num == 1:
+            html = articles[0].evaluate("e => e.outerHTML")
+
+            with open("page.html", "w", encoding="utf-8") as f:
+                f.write(page.content())
+
+            import re
+
+            html = page.content()
+
+            print("offers:", re.findall(r"/offers/[^\"'> ]+", html)[:10])
+            print("listing:", re.findall(r"/listing/[^\"'> ]+", html)[:10])
+            print("detail:", re.findall(r"/details/[^\"'> ]+", html)[:10])
+
+
+            raise Exception("STOP")
+
+        print("Összes href az első article-ben:")
+
         # =================
 
         for a in articles[0].locator("a").all():
