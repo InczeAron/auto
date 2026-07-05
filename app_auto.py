@@ -269,16 +269,19 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         # ===== DEBUG =====
         if page_num == 1 and len(articles) > 0:
-            article = articles[0]
-
-            print(article.evaluate("""
+            data = articles[0].evaluate("""
             e => ({
                 html: e.outerHTML,
                 dataset: Object.assign({}, e.dataset)
             })
-            """))
+            """)
 
-            raise Exception("STOP")
+            import json
+
+            with open("article.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+
+            raise Exception("STOP")            
         
 
         if len(articles) > 0 and page_num == 1:
