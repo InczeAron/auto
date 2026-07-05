@@ -289,8 +289,7 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             .map(e => e.getAttribute("href"))
         """))
 
-        with open("article.html", "w", encoding="utf-8") as f:
-            f.write(article.evaluate("e => e.outerHTML"))
+        
         # =================
 
         for a in articles[0].locator("a").all():
