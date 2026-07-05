@@ -268,32 +268,26 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         print("ARTICLE COUNT:", len(articles))
 
         # ===== DEBUG =====
-        if page_num == 1 and len(articles) > 0:
-            data = articles[0].evaluate("""
-            e => ({
-                html: e.outerHTML,
-                dataset: Object.assign({}, e.dataset)
-            })
-            """)
+        print(article.evaluate("""
+        e => ({
+            onclick: e.onclick,
+            dataset: e.dataset,
+            role: e.getAttribute("role"),
+            tabIndex: e.getAttribute("tabindex")
+        })
+        """))
 
-            import json
-
-            with open("article.json", "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-
-            raise Exception("STOP")            
+        print(article.locator("*").evaluate_all("""
+        els => els
+            .filter(e => e.hasAttribute("data-href"))
+            .map(e => e.getAttribute("data-href"))
+        """))
         
-
-        if len(articles) > 0 and page_num == 1:
-            html = articles[0].evaluate("e => e.outerHTML")
-
-            with open("article.html", "w", encoding="utf-8") as f:
-                f.write(html)
-
-            raise Exception("STOP")
-
-        print("Összes href az első article-ben:")
-
+        print(article.locator("*").evaluate_all("""
+        els => els
+            .filter(e => e.hasAttribute("href"))
+            .map(e => e.getAttribute("href"))
+        """))
         # =================
 
         for a in articles[0].locator("a").all():
