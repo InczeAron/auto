@@ -289,8 +289,16 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             .map(e => e.getAttribute("href"))
         """))
 
+        import os
+
+        print("PWD:", os.getcwd())
+        print("Files before:", os.listdir("."))
+
         with open("article.html", "w", encoding="utf-8") as f:
             f.write(article.evaluate("e => e.outerHTML"))
+
+            print("Files after:", os.listdir("."))
+            print("Exists page:", os.path.exists("page.html"))
 
         if len(articles) > 0 and page_num == 1:
             html = articles[0].evaluate("e => e.outerHTML")

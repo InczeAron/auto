@@ -45,6 +45,6 @@ jobs:
         with:
           name: debug
           path: |
-            article.html
+            page.html
             debug.html
             debug.png
