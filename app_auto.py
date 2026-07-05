@@ -268,8 +268,11 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         print("ARTICLE COUNT:", len(articles))
 
         if len(articles) > 0 and page_num == 1:
-            print("===== FIRST ARTICLE HTML =====")
-            print(articles[0].evaluate("e => e.outerHTML"))
+            html = articles[0].evaluate("e => e.outerHTML")
+
+            with open("article.html", "w", encoding="utf-8") as f:
+                f.write(html)
+
             raise Exception("STOP")
 
         print("Összes href az első article-ben:")
