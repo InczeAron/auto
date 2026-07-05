@@ -267,6 +267,20 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         print("ARTICLE COUNT:", len(articles))
 
+        # ===== DEBUG =====
+        if page_num == 1 and len(articles) > 0:
+            article = articles[0]
+
+            print(article.evaluate("""
+            e => ({
+                html: e.outerHTML,
+                dataset: Object.assign({}, e.dataset)
+            })
+            """))
+
+            raise Exception("STOP")
+        
+
         if len(articles) > 0 and page_num == 1:
             html = articles[0].evaluate("e => e.outerHTML")
 
@@ -276,6 +290,8 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             raise Exception("STOP")
 
         print("Összes href az első article-ben:")
+
+        # =================
 
         for a in articles[0].locator("a").all():
             print(a.get_attribute("href"))
