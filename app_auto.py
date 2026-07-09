@@ -415,7 +415,7 @@ def run_scraper():
                         continue
 
                     car_id = link.rstrip("/").split("/")[-1]
-                    if not car_id or len(car_id) < 3:
+                    if not car_id or len(car_id) < 10:
                         continue
 
                     if car_id not in seen:
