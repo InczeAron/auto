@@ -1,5 +1,4 @@
 import time, re, smtplib, os, psycopg2
-from ftplib import FTP
 from playwright.sync_api import sync_playwright
 from email.message import EmailMessage
 
@@ -54,66 +53,6 @@ def save_seen(dealer_id, car_ids):
     conn.commit()
     cur.close()
     conn.close()
-
-
-# =========================
-# FORPSI FTP - LINKEK TXT FÁJLBAN
-# =========================
-def _ftp_connect():
-    host = os.environ.get("FORPSI_FTP_HOST = https://webftp.forpsi.hu/")
-    user = os.environ.get("FORPSI_FTP_USER = www.aronsoft.hu")
-    password = os.environ.get("FORPSI_FTP_PASS = fgdf5F6d8d@5")
-    remote_dir = os.environ.get("FORPSI_FTP_DIR", "/")
-
-    ftp = FTP(host, timeout=30)
-    ftp.login(user, password)
-    if remote_dir and remote_dir != "/":
-        ftp.cwd(remote_dir)
-    return ftp
-
-def _seen_links_filename(dealer_id):
-    return f"seen_links_{dealer_id}.txt"
-
-def load_seen_links(dealer_id):
-    """Letölti a Forpsi tárhelyről a dealerhez tartozó linkek txt fájlját,
-    és halmazként adja vissza a benne lévő linkeket."""
-    filename = _seen_links_filename(dealer_id)
-    local_path = f"/tmp/{filename}"
-
-    try:
-        ftp = _ftp_connect()
-        with open(local_path, "wb") as f:
-            ftp.retrbinary(f"RETR {filename}", f.write)
-        ftp.quit()
-        print(f"⬇️ Seen linkek letöltve: {filename}")
-    except Exception as e:
-        # Ha még nem létezik a fájl (első futás), üresen indulunk
-        print(f"⚠️ Nem sikerült letölteni ({filename}), üres listával indulunk: {e}")
-        open(local_path, "w", encoding="utf-8").close()
-
-    with open(local_path, "r", encoding="utf-8") as f:
-        links = {line.strip() for line in f if line.strip()}
-
-    return links
-
-def save_seen_links(dealer_id, links):
-    """Felülírja a dealerhez tartozó txt fájlt a Forpsi tárhelyen
-    a megadott (teljes, frissített) link-halmazzal."""
-    filename = _seen_links_filename(dealer_id)
-    local_path = f"/tmp/{filename}"
-
-    with open(local_path, "w", encoding="utf-8") as f:
-        for link in sorted(links):
-            f.write(link + "\n")
-
-    try:
-        ftp = _ftp_connect()
-        with open(local_path, "rb") as f:
-            ftp.storbinary(f"STOR {filename}", f)
-        ftp.quit()
-        print(f"✅ Seen linkek feltöltve a Forpsi tárhelyre: {filename}")
-    except Exception as e:
-        print(f"❌ Nem sikerült feltölteni a seen linkeket ({filename}): {e}")
 
 
 # =========================
@@ -204,6 +143,16 @@ def save_to_excel(cars, filename):
 
         deal_cell = ws.cell(row=row, column=9)
         deal_cell.font = Font(color=color, bold=True)
+
+        # link = car.get("Link")
+        # if link:
+        #     print("LINK:", link)
+        #     print("CAR_ID:", link.rstrip("/").split("/")[-1])
+        # else:
+        #     print("LINK HIÁNYZIK")
+
+        # car_id = link.rstrip("/").split("/")[-1]
+        # print("CAR_ID:", car_id)
 
     widths = [5, 50, 15, 12, 12, 12, 20, 8, 15]
     for i, w in enumerate(widths, 1):
@@ -309,6 +258,8 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         print("URL:", page.url)
         print("HTML LEN:", len(page.content()))
 
+        
+
         articles = page.locator("article").all()
 
         print("ARTICLE COUNT:", len(articles))
@@ -317,8 +268,13 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
             print("⛔ Nincs találat!")
             break
 
+        #article = articles[0]
+
+        
+
         print(f"  → {len(articles)} hirdetés")
 
+        # Link kinyerés: regex a page HTML-ből (megbízhatóbb mint locator)
         html_content = page.content()
         offer_links  = re.findall(r'href="(/offers/[^"]+)"', html_content)
 
@@ -391,6 +347,7 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 # =========================
 def run_scraper():
     print("🚀 SCRAPER START")
+    init_db()
 
     dealers = [
         {
@@ -447,6 +404,7 @@ def run_scraper():
             print(f"\n{'='*40}")
             print(f"🏢 Dealer: {dealer_id}")
 
+            # 🔥 ÚJ CONTEXT DEALERENKÉNT
             context = browser.new_context(
                 user_agent=random.choice(USER_AGENTS),
                 viewport={"width": 1280, "height": 800},
@@ -457,11 +415,10 @@ def run_scraper():
                 "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
             )
 
-            # 🔥 Seen linkek betöltése a Forpsi tárhelyen lévő txt fájlból
-            seen_links = load_seen_links(dealer_id)
+            seen = load_seen(dealer_id)
 
             all_new_cars = []
-            all_new_links = []
+            all_new_ids  = []
 
             for search in dealer["searches"]:
                 label = f"{search['brand']} {search['model']} ({search['country']})"
@@ -485,7 +442,16 @@ def run_scraper():
                 if len(cars) == 0:
                     print("  ⚠️ NINCS TALÁLAT (block vagy selector hiba)")
 
-                # csoportosítás év szerint
+                # Átlag + pontszám
+                """valid_prices = [c["Ár_num"] for c in cars if c.get("Ár_num")]
+                avg_price = sum(valid_prices) / len(valid_prices) if valid_prices else 0
+
+                for c in cars:
+                    if c.get("Ár_num") and avg_price:
+                        c["Pontszám"] = round((avg_price - c["Ár_num"]) / avg_price * 100)
+                        c["Átlag"] = avg_price   # 🔥 új"""
+                
+                #csoportosítás év szerint
                 cars_by_year = {}
 
                 for c in cars:
@@ -495,6 +461,7 @@ def run_scraper():
                     if not year or not price:
                         continue
 
+                    # pl: "03/2024" → "2024"
                     year_only = year.split("/")[-1]
 
                     if year_only not in cars_by_year:
@@ -502,7 +469,7 @@ def run_scraper():
 
                     cars_by_year[year_only].append(price)
 
-                # medián számítás évente
+                #medián számítás évente
                 medians = {}
 
                 for year, prices in cars_by_year.items():
@@ -521,7 +488,7 @@ def run_scraper():
 
                     all_medians.update(medians)
 
-                # pontszám számítás (évente)
+                #pontszám számítás (évente)
                 for c in cars:
                     year = c.get("Év")
                     price = c.get("Ár_num")
@@ -534,26 +501,36 @@ def run_scraper():
 
                     if median:
                         c["Pontszám"] = round((median - price) / median * 100)
-                        c["Medián"] = median
+                        c["Medián"] = median  # extra debug/info  
 
-                # 🔥 Új autók szűrése a link alapján (Forpsi txt fájl a referencia)
+                # Új autók szűrése
                 for car in cars:
                     link = car.get("Link")
+                    print("LINK:", link)
                     if not link:
                         continue
 
-                    if link not in seen_links:
-                        seen_links.add(link)
+                    car_id = link.rstrip("/").split("/")[-1]
+                    print("CAR_ID:", car_id)
+
+                    print("SEEN:", car_id in seen)
+
+                    if not car_id or len(car_id) < 10:
+                        print("SKIP: short id")
+                        continue
+
+                    if car_id not in seen:
+                        seen.add(car_id)  # 🔥 KRITIKUS FIX
                         car["Keresés"] = label
                         all_new_cars.append(car)
-                        all_new_links.append(link)
+                        all_new_ids.append(car_id)
 
-            context.close()
+            context.close()  # 🔥 FONTOS
 
             print(f"\n📬 New cars ({dealer_id}): {len(all_new_cars)}")
 
-            # 🔥 Frissített teljes lista visszaírása a Forpsi tárhelyre
-            save_seen_links(dealer_id, seen_links)
+            # 🔥 MINDIG MENTSD EL AZ ÚJ ID-KAT!
+            save_seen(dealer_id, all_new_ids)
 
             if not all_new_cars:
                 send_email(
@@ -566,18 +543,24 @@ def run_scraper():
             # Rendezés
             all_new_cars.sort(
                 key=lambda x: (
-                    parse_date(x.get("Év")),
-                    x.get("Pontszám") or -999
+                    parse_date(x.get("Év")),          # 1️⃣ év+hónap
+                    x.get("Pontszám") or -999         # 2️⃣ deal
                 ),
                 reverse=True
             )
 
+            # Sorszám újra
             for i, c in enumerate(all_new_cars, 1):
                 c["Sorszám"] = i
 
-            filename = f"{dealer_id}_{search['brand']}.xlsx"
+            # Excel
+            filename = f"{dealer_id}_{search['brand']}.xlsx" #f"{dealer_id}.xlsx"
             save_to_excel(all_new_cars, filename)
 
+            # DB mentés
+            save_seen(dealer_id, all_new_ids)
+
+            # Email
             email_html = build_email_html(all_new_cars, all_medians, dealer_id)
 
             send_email(
