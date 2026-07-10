@@ -32,6 +32,10 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FORPSI_FTP_HOST: ${{ secrets.FORPSI_FTP_HOST }}
+          FORPSI_FTP_USER: ${{ secrets.FORPSI_FTP_USER }}
+          FORPSI_FTP_PASS: ${{ secrets.FORPSI_FTP_PASS }}
+          FORPSI_FTP_DIR: ${{ secrets.FORPSI_FTP_DIR }}
 
       - name: Upload Excel
         uses: actions/upload-artifact@v4
