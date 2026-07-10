@@ -73,10 +73,13 @@ def _ftp_connect():
     print("DIR :", remote_dir)
     print("PASS:", "***" if password else None)
 
-    ftp = FTP(host, timeout=30)
+    from ftplib import FTP_TLS
+
+    ftp = FTP_TLS(host, timeout=30)
     ftp.set_debuglevel(2)
     ftp.connect(host, 21)
     ftp.login(user, password)
+    ftp.prot_p()
     print("Sikeres login")
     print("PWD:", ftp.pwd())
     if remote_dir and remote_dir != "/":
