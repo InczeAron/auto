@@ -60,13 +60,25 @@ def save_seen(dealer_id, car_ids):
 # FORPSI FTP - LINKEK TXT FÁJLBAN
 # =========================
 def _ftp_connect():
+
+    import os
+
     host = os.environ.get("FORPSI_FTP_HOST")
     user = os.environ.get("FORPSI_FTP_USER")
     password = os.environ.get("FORPSI_FTP_PASS")
     remote_dir = os.environ.get("FORPSI_FTP_DIR", "/")
 
+    print("HOST:", host)
+    print("USER:", user)
+    print("DIR :", remote_dir)
+    print("PASS:", "***" if password else None)
+
     ftp = FTP(host, timeout=30)
+    ftp.set_debuglevel(2)
+    ftp.connect(host, 21)
     ftp.login(user, password)
+    print("Sikeres login")
+    print("PWD:", ftp.pwd())
     if remote_dir and remote_dir != "/":
         ftp.cwd(remote_dir)
     return ftp
