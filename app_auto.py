@@ -60,9 +60,9 @@ def save_seen(dealer_id, car_ids):
 # FORPSI FTP - LINKEK TXT FÁJLBAN
 # =========================
 def _ftp_connect():
-    host = os.environ.get("FORPSI_FTP_HOST = https://webftp.forpsi.hu/")
-    user = os.environ.get("FORPSI_FTP_USER = www.aronsoft.hu")
-    password = os.environ.get("FORPSI_FTP_PASS = fgdf5F6d8d@5")
+    host = os.environ.get("FORPSI_FTP_HOST")
+    user = os.environ.get("FORPSI_FTP_USER")
+    password = os.environ.get("FORPSI_FTP_PASS")
     remote_dir = os.environ.get("FORPSI_FTP_DIR", "/")
 
     ftp = FTP(host, timeout=30)
