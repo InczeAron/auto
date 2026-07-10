@@ -144,15 +144,15 @@ def save_to_excel(cars, filename):
         deal_cell = ws.cell(row=row, column=9)
         deal_cell.font = Font(color=color, bold=True)
 
-        link = car.get("Link")
-        if link:
-            print("LINK:", link)
-            print("CAR_ID:", link.rstrip("/").split("/")[-1])
-        else:
-            print("LINK HIÁNYZIK")
+        # link = car.get("Link")
+        # if link:
+        #     print("LINK:", link)
+        #     print("CAR_ID:", link.rstrip("/").split("/")[-1])
+        # else:
+        #     print("LINK HIÁNYZIK")
 
-        car_id = link.rstrip("/").split("/")[-1]
-        print("CAR_ID:", car_id)
+        # car_id = link.rstrip("/").split("/")[-1]
+        # print("CAR_ID:", car_id)
 
     widths = [5, 50, 15, 12, 12, 12, 20, 8, 15]
     for i, w in enumerate(widths, 1):
@@ -258,132 +258,25 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         print("URL:", page.url)
         print("HTML LEN:", len(page.content()))
 
-        """articles = page.locator("article").all()
-
-        print("Összes href az első article-ben:")
-
-        for a in articles[0].locator("a").all():
-            print(a.get_attribute("href"))
-
-        print("ARTICLE COUNT:", len(articles))"""
+        
 
         articles = page.locator("article").all()
 
         print("ARTICLE COUNT:", len(articles))
 
         if not articles:
-            print("Nincs article")
+            print("⛔ Nincs találat!")
             break
 
-        article = articles[0]
+        #article = articles[0]
 
-        # ===== DEBUG =====
-
-        print("DATASET:")
-        print(article.evaluate("e => e.dataset"))
-
-        print("DATA-HREF:")
-        print(article.locator("*").evaluate_all("""
-        els => els
-            .filter(e => e.hasAttribute("data-href"))
-            .map(e => e.getAttribute("data-href"))
-        """))
-
-        import re
-
-        html = page.content()
-
-        print("OFFERS:", re.findall(r"/offers/[^\"'> ]+", html)[:20])
-        print("LISTING:", re.findall(r"/listing/[^\"'> ]+", html)[:20])
-        print("DETAIL:", re.findall(r"/details/[^\"'> ]+", html)[:20])
-
-        raise Exception("STOP")
-
-        # =================
-
-        print("Összes href az első article-ben:")
-        for a in article.locator("a").all():
-            print(a.get_attribute("href"))
-
-        # ===== DEBUG =====
-        print(article.evaluate("""
-        e => ({
-            onclick: e.onclick,
-            dataset: e.dataset,
-            role: e.getAttribute("role"),
-            tabIndex: e.getAttribute("tabindex")
-        })
-        """))      
-
-        print(article.locator("*").evaluate_all("""
-        els => els
-            .filter(e => e.hasAttribute("data-href"))
-            .map(e => e.getAttribute("data-href"))
-        """))
         
-        print(article.locator("*").evaluate_all("""
-        els => els
-            .filter(e => e.hasAttribute("href"))
-            .map(e => e.getAttribute("href"))
-        """))
-
-        import os
-
-        print("PWD:", os.getcwd())
-        print("Files before:", os.listdir("."))
-
-        with open("article.html", "w", encoding="utf-8") as f:
-            f.write(article.evaluate("e => e.outerHTML"))
-
-            print("Files after:", os.listdir("."))
-            print("Exists page:", os.path.exists("page.html"))
-
-        if len(articles) > 0 and page_num == 1:
-            html = articles[0].evaluate("e => e.outerHTML")
-
-            with open("page.html", "w", encoding="utf-8") as f:
-                f.write(page.content())
-
-            import re
-
-            html = page.content()
-
-            print("offers:", re.findall(r"/offers/[^\"'> ]+", html)[:10])
-            print("listing:", re.findall(r"/listing/[^\"'> ]+", html)[:10])
-            print("detail:", re.findall(r"/details/[^\"'> ]+", html)[:10])
-
-
-            raise Exception("STOP")
-
-        print("Összes href az első article-ben:")
-
-        # =================
-
-        for a in articles[0].locator("a").all():
-            print(a.get_attribute("href"))
-
-        if len(articles) == 0:
-            page.screenshot(path="debug.png")
-            with open("debug.html", "w", encoding="utf-8") as f:
-                f.write(page.content())
-
-        print("URL:", page.url)
-
-        html = page.content()
-
-        print("HTML SIZE:", len(html))
-
-        with open("debug.html", "w", encoding="utf-8") as f:
-            f.write(html)
-
-        page.screenshot(path="debug.png")
-
-        articles = page.locator("article").all()
-        if not articles:
-            print("  ⛔ Nincs találat")
-            break
 
         print(f"  → {len(articles)} hirdetés")
+
+        # Link kinyerés: regex a page HTML-ből (megbízhatóbb mint locator)
+        html_content = page.content()
+        offer_links  = re.findall(r'href="(/offers/[^"]+)"', html_content)
 
         for article in articles:
             try:
@@ -392,14 +285,11 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                 price_num = extract_price(price_text)
 
                 link = ""
-                try:
-                    href = article.locator("a[href*='/offers/']").first.get_attribute("href", timeout=500)
-                    if href:
-                        link = "https://www.autoscout24.com" + href if href.startswith("/") else href
-                        link = link.split("?")[0]
-                except Exception:
-                    pass
-
+                article_html = article.evaluate("e => e.outerHTML")
+                found = re.findall(r'href="(/offers/[^"]+)"', article_html)
+                if found:
+                    link = "https://www.autoscout24.com" + found[0].split("?")[0]
+                    
                 km = None
                 year = ""
                 fuel = ""
