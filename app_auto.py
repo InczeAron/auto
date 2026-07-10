@@ -75,15 +75,19 @@ def _ftp_connect():
 
     from ftplib import FTP_TLS
 
-    ftp = FTP_TLS(host, timeout=30)
+    ftp = FTP_TLS(timeout=30)
     ftp.set_debuglevel(2)
+
     ftp.connect(host, 21)
     ftp.login(user, password)
     ftp.prot_p()
+
     print("Sikeres login")
     print("PWD:", ftp.pwd())
+
     if remote_dir and remote_dir != "/":
         ftp.cwd(remote_dir)
+        
     return ftp
 
 def _seen_links_filename(dealer_id):
