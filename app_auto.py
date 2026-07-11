@@ -332,7 +332,7 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                 except:
                     location = ""
 
-                    print("LINK:", link)
+                print("LINK:", link)
 
                 cars.append({
                     "Sorszám": len(cars) + 1,
