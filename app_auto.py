@@ -517,6 +517,13 @@ def run_scraper():
                         all_new_cars.append(car)
                         all_new_links.append(link)
 
+                print(
+                            "LINK:",
+                            repr(link),
+                            "SEEN:",
+                            link in seen_links
+                        )
+
             context.close()
 
             print(f"\n📬 New cars ({dealer_id}): {len(all_new_cars)}")
