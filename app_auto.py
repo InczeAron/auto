@@ -1,5 +1,4 @@
-import time, re, smtplib, os, psycopg2, socket
-from ftplib import FTP_TLS
+import time, re, smtplib, os, psycopg2
 from playwright.sync_api import sync_playwright
 from email.message import EmailMessage
 
@@ -57,94 +56,31 @@ def save_seen(dealer_id, car_ids):
 
 
 # =========================
-# FORPSI FTP - LINKEK TXT FÁJLBAN
+# GitHub - LINKEK JSON FÁJLBAN
 # =========================
-def _ftp_connect():
 
-    #host = os.environ.get("FORPSI_FTP_HOST")
-    host = "ftpx.forpsi.com"
-    user = os.environ.get("FORPSI_FTP_USER")
-    password = os.environ.get("FORPSI_FTP_PASS")
-    remote_dir = os.environ.get("FORPSI_FTP_DIR", "/")
+import json
+from pathlib import Path
 
-    print("========== FTP DEBUG ==========")
-    print("HOST      :", repr(host))
-    print("USER      :", repr(user))
-    print("DIR       :", repr(remote_dir))
-    print("PASS LEN  :", len(password) if password else None)
-    print("PASS START:", password[:3] if password else None)
-    print("PASS END  :", password[-3:] if password else None)
+SEEN_DIR = Path("seen_links")
+SEEN_DIR.mkdir(exist_ok=True)
 
-    try:
-        print("DNS:", socket.gethostbyname(host))
-    except Exception as e:
-        print("DNS ERROR:", e)
-
-    ftp = FTP_TLS()
-    ftp.set_debuglevel(2)
-
-    print("CONNECT...")
-    ftp.connect(host, 21)
-
-    print("LOGIN...")
-    ftp.login(user, password)
-
-    print("PROT P...")
-    ftp.prot_p()
-
-    print("PWD:", ftp.pwd())
-
-    if remote_dir and remote_dir != "/":
-        print("CWD:", remote_dir)
-        ftp.cwd(remote_dir)
-
-    print("========== FTP OK ==========")
-
-    return ftp
-
-def _seen_links_filename(dealer_id):
-    return f"seen_links_{dealer_id}.txt"
 
 def load_seen_links(dealer_id):
-    """Letölti a Forpsi tárhelyről a dealerhez tartozó linkek txt fájlját,
-    és halmazként adja vissza a benne lévő linkeket."""
-    filename = _seen_links_filename(dealer_id)
-    local_path = f"/tmp/{filename}"
+    file = SEEN_DIR / f"{dealer_id}.json"
 
-    try:
-        ftp = _ftp_connect()
-        with open(local_path, "wb") as f:
-            ftp.retrbinary(f"RETR {filename}", f.write)
-        ftp.quit()
-        print(f"⬇️ Seen linkek letöltve: {filename}")
-    except Exception as e:
-        # Ha még nem létezik a fájl (első futás), üresen indulunk
-        print(f"⚠️ Nem sikerült letölteni ({filename}), üres listával indulunk: {e}")
-        open(local_path, "w", encoding="utf-8").close()
+    if not file.exists():
+        return set()
 
-    with open(local_path, "r", encoding="utf-8") as f:
-        links = {line.strip() for line in f if line.strip()}
+    with open(file, "r", encoding="utf-8") as f:
+        return set(json.load(f))
 
-    return links
 
 def save_seen_links(dealer_id, links):
-    """Felülírja a dealerhez tartozó txt fájlt a Forpsi tárhelyen
-    a megadott (teljes, frissített) link-halmazzal."""
-    filename = _seen_links_filename(dealer_id)
-    local_path = f"/tmp/{filename}"
+    file = SEEN_DIR / f"{dealer_id}.json"
 
-    with open(local_path, "w", encoding="utf-8") as f:
-        for link in sorted(links):
-            f.write(link + "\n")
-
-    try:
-        ftp = _ftp_connect()
-        with open(local_path, "rb") as f:
-            ftp.storbinary(f"STOR {filename}", f)
-        ftp.quit()
-        print(f"✅ Seen linkek feltöltve a Forpsi tárhelyre: {filename}")
-    except Exception as e:
-        print(f"❌ Nem sikerült feltölteni a seen linkeket ({filename}): {e}")
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(sorted(list(links)), f, indent=2)
 
 
 # =========================

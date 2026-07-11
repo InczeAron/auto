@@ -32,10 +32,7 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          FORPSI_FTP_HOST: ${{ secrets.FORPSI_FTP_HOST }}
-          FORPSI_FTP_USER: ${{ secrets.FORPSI_FTP_USER }}
-          FORPSI_FTP_PASS: ${{ secrets.FORPSI_FTP_PASS }}
-          FORPSI_FTP_DIR: ${{ secrets.FORPSI_FTP_DIR }}
+          
 
       - name: Upload Excel
         uses: actions/upload-artifact@v4
@@ -43,3 +40,14 @@ jobs:
           name: autos
           path: "*.xlsx"
           if-no-files-found: ignore
+
+      - name: Commit seen links
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add seen_links/*.json
+
+          git diff --cached --quiet || git commit -m "Update seen links"
+
+          git push
