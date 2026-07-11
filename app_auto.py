@@ -368,21 +368,21 @@ def run_scraper():
             ]
         },
         {
-            "dealer_id": "dealer2",
+            "dealer_id": "dealer1",
             "emails": ["aronincze@aronsoft.hu"],
             "searches": [
                 {"brand": "audi", "model": "a6", "year_from": 2024, "year_to": 2026, "country": "A"},
             ]
         },
         {
-            "dealer_id": "dealer3",
+            "dealer_id": "dealer2",
             "emails": ["inczearon@gmail.com"],
             "searches": [
                 {"brand": "mercedes-benz", "model": "gla-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
         {
-            "dealer_id": "dealer4",
+            "dealer_id": "dealer2",
             "emails": ["inczearon@gmail.com"],
             "searches": [
                 {"brand": "volkswagen", "model": "golf", "year_from": 2024, "year_to": 2026, "country": "D"},
