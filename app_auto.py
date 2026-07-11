@@ -370,21 +370,21 @@ def run_scraper():
             ]
         },
         {
-            "dealer_id": "dealer1",
+            "dealer_id": "dealer2",
             "emails": ["aronincze@aronsoft.hu"],
             "searches": [
                 {"brand": "audi", "model": "a6", "year_from": 2024, "year_to": 2026, "country": "A"},
             ]
         },
         {
-            "dealer_id": "dealer2",
+            "dealer_id": "dealer3",
             "emails": ["inczearon@gmail.com"],
             "searches": [
                 {"brand": "mercedes-benz", "model": "gla-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
         {
-            "dealer_id": "dealer2",
+            "dealer_id": "dealer4",
             "emails": ["inczearon@gmail.com"],
             "searches": [
                 {"brand": "volkswagen", "model": "golf", "year_from": 2024, "year_to": 2026, "country": "D"},
@@ -516,13 +516,6 @@ def run_scraper():
                         car["Keresés"] = label
                         all_new_cars.append(car)
                         all_new_links.append(link)
-
-                print(
-                            "LINK:",
-                            repr(link),
-                            "SEEN:",
-                            link in seen_links
-                        )
 
             context.close()
 
