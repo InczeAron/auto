@@ -281,43 +281,19 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         print(f"  → {len(articles)} hirdetés")
 
-        # Az összes autó linket kinyerjük az oldal HTML-jéből egyszerre
-        html_content = page.content()
-
-        # Próbáljuk az összes lehetséges link formátumot
-        offer_links = []
-
-        # 1. /offers/ formátum
-        found_offers = re.findall(r'href="((?:https://www\.autoscout24\.com)?/offers/[^"?]+)', html_content)
-        if found_offers:
-            offer_links = found_offers
-
-        # 2. Ha nincs /offers/, próbáljuk a /lst/ detail linkeket
-        if not offer_links:
-            found_lst = re.findall(r'"url"\s*:\s*"(https://www\.autoscout24\.com/[^"]+)"', html_content)
-            offer_links = [l for l in found_lst if "/offers/" in l or "/details/" in l]
-
-        # Teljes URL-lé alakítás és duplikáció törlés
-        clean_links = []
-        seen_in_page = set()
-        for l in offer_links:
-            if not l.startswith("http"):
-                l = "https://www.autoscout24.com" + l
-            l = l.split("?")[0]
-            if l not in seen_in_page:
-                seen_in_page.add(l)
-                clean_links.append(l)
-
-        print(f"  🔗 Linkek az oldalon: {len(clean_links)}")
-
         for idx, article in enumerate(articles):
             try:
                 title = article.locator("h2").first.inner_text(timeout=1000).strip()
                 price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000).strip()
                 price_num = extract_price(price_text)
 
-                # Link hozzárendelése index alapján
-                link = clean_links[idx] if idx < len(clean_links) else ""
+                # GUID kinyerése az article HTML-jéből → autó link felépítése
+                link = ""
+                article_html = article.evaluate("e => e.outerHTML")
+                guid_match = re.search(r'guid=([a-f0-9-]{36})', article_html)
+                if guid_match:
+                    guid = guid_match.group(1)
+                    link = f"https://www.autoscout24.com/offers/{guid}"
                     
                 km = None
                 year = ""
