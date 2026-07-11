@@ -273,7 +273,12 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
         except Exception:
             pass
 
+        print("URL:", page.url)
+        print("HTML LEN:", len(page.content()))
+
         articles = page.locator("article").all()
+
+        print("ARTICLE COUNT:", len(articles))
 
         if not articles:
             print("⛔ Nincs találat!")
@@ -281,43 +286,20 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         print(f"  → {len(articles)} hirdetés")
 
-        # Az összes autó linket kinyerjük az oldal HTML-jéből egyszerre
         html_content = page.content()
+        offer_links  = re.findall(r'href="(/offers/[^"]+)"', html_content)
 
-        # Próbáljuk az összes lehetséges link formátumot
-        offer_links = []
-
-        # 1. /offers/ formátum
-        found_offers = re.findall(r'href="((?:https://www\.autoscout24\.com)?/offers/[^"?]+)', html_content)
-        if found_offers:
-            offer_links = found_offers
-
-        # 2. Ha nincs /offers/, próbáljuk a /lst/ detail linkeket
-        if not offer_links:
-            found_lst = re.findall(r'"url"\s*:\s*"(https://www\.autoscout24\.com/[^"]+)"', html_content)
-            offer_links = [l for l in found_lst if "/offers/" in l or "/details/" in l]
-
-        # Teljes URL-lé alakítás és duplikáció törlés
-        clean_links = []
-        seen_in_page = set()
-        for l in offer_links:
-            if not l.startswith("http"):
-                l = "https://www.autoscout24.com" + l
-            l = l.split("?")[0]
-            if l not in seen_in_page:
-                seen_in_page.add(l)
-                clean_links.append(l)
-
-        print(f"  🔗 Linkek az oldalon: {len(clean_links)}")
-
-        for idx, article in enumerate(articles):
+        for article in articles:
             try:
                 title = article.locator("h2").first.inner_text(timeout=1000).strip()
                 price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000).strip()
                 price_num = extract_price(price_text)
 
-                # Link hozzárendelése index alapján
-                link = clean_links[idx] if idx < len(clean_links) else ""
+                link = ""
+                article_html = article.evaluate("e => e.outerHTML")
+                found = re.findall(r'href="(/offers/[^"]+)"', article_html)
+                if found:
+                    link = "https://www.autoscout24.com" + found[0].split("?")[0]
                     
                 km = None
                 year = ""
@@ -382,8 +364,14 @@ def run_scraper():
             "dealer_id": "dealer1",
             "emails": ["aronincze@aronsoft.hu"],
             "searches": [
-                {"brand": "bmw",  "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
-                {"brand": "audi", "model": "a6",             "year_from": 2024, "year_to": 2026, "country": "A"},
+                {"brand": "bmw",   "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
+            ]
+        },
+        {
+            "dealer_id": "dealer1",
+            "emails": ["aronincze@aronsoft.hu"],
+            "searches": [
+                {"brand": "audi", "model": "a6", "year_from": 2024, "year_to": 2026, "country": "A"},
             ]
         },
         {
@@ -391,7 +379,13 @@ def run_scraper():
             "emails": ["inczearon@gmail.com"],
             "searches": [
                 {"brand": "mercedes-benz", "model": "gla-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
-                {"brand": "volkswagen",    "model": "golf",      "year_from": 2024, "year_to": 2026, "country": "D"},
+            ]
+        },
+        {
+            "dealer_id": "dealer2",
+            "emails": ["inczearon@gmail.com"],
+            "searches": [
+                {"brand": "volkswagen", "model": "golf", "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
     ]
