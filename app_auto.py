@@ -61,7 +61,8 @@ def save_seen(dealer_id, car_ids):
 # =========================
 def _ftp_connect():
 
-    host = os.environ.get("FORPSI_FTP_HOST")
+    #host = os.environ.get("FORPSI_FTP_HOST")
+    host = "ftpx.forpsi.com"
     user = os.environ.get("FORPSI_FTP_USER")
     password = os.environ.get("FORPSI_FTP_PASS")
     remote_dir = os.environ.get("FORPSI_FTP_DIR", "/")
