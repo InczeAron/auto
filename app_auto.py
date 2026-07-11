@@ -1,5 +1,5 @@
 import time, re, smtplib, os, psycopg2
-from ftplib import FTP
+from ftplib import FTP_TLS
 from playwright.sync_api import sync_playwright
 from email.message import EmailMessage
 
@@ -61,33 +61,24 @@ def save_seen(dealer_id, car_ids):
 # =========================
 def _ftp_connect():
 
-    import os
-
     host = os.environ.get("FORPSI_FTP_HOST")
     user = os.environ.get("FORPSI_FTP_USER")
     password = os.environ.get("FORPSI_FTP_PASS")
     remote_dir = os.environ.get("FORPSI_FTP_DIR", "/")
 
-    print("HOST:", host)
-    print("USER:", user)
-    print("DIR :", remote_dir)
-    print("PASS:", "***" if password else None)
+    ftp = FTP_TLS(host)
+    # ftp.set_debuglevel(2)
 
-    from ftplib import FTP_TLS
-
-    ftp = FTP_TLS(timeout=30)
-    ftp.set_debuglevel(2)
-
-    ftp.connect(host, 21)
+    # ftp.connect(host, 21)
     ftp.login(user, password)
     ftp.prot_p()
 
     print("Sikeres login")
-    print("PWD:", ftp.pwd())
+    #print("PWD:", ftp.pwd())
 
     if remote_dir and remote_dir != "/":
         ftp.cwd(remote_dir)
-        
+
     return ftp
 
 def _seen_links_filename(dealer_id):
