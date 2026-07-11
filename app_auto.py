@@ -1,4 +1,4 @@
-import time, re, smtplib, os, psycopg2
+import time, re, smtplib, os, psycopg2, socket
 from ftplib import FTP_TLS
 from playwright.sync_api import sync_playwright
 from email.message import EmailMessage
@@ -66,18 +66,38 @@ def _ftp_connect():
     password = os.environ.get("FORPSI_FTP_PASS")
     remote_dir = os.environ.get("FORPSI_FTP_DIR", "/")
 
-    ftp = FTP_TLS(host)
-    # ftp.set_debuglevel(2)
+    print("========== FTP DEBUG ==========")
+    print("HOST      :", repr(host))
+    print("USER      :", repr(user))
+    print("DIR       :", repr(remote_dir))
+    print("PASS LEN  :", len(password) if password else None)
+    print("PASS START:", password[:3] if password else None)
+    print("PASS END  :", password[-3:] if password else None)
 
-    # ftp.connect(host, 21)
+    try:
+        print("DNS:", socket.gethostbyname(host))
+    except Exception as e:
+        print("DNS ERROR:", e)
+
+    ftp = FTP_TLS()
+    ftp.set_debuglevel(2)
+
+    print("CONNECT...")
+    ftp.connect(host, 21)
+
+    print("LOGIN...")
     ftp.login(user, password)
+
+    print("PROT P...")
     ftp.prot_p()
 
-    print("Sikeres login")
-    #print("PWD:", ftp.pwd())
+    print("PWD:", ftp.pwd())
 
     if remote_dir and remote_dir != "/":
+        print("CWD:", remote_dir)
         ftp.cwd(remote_dir)
+
+    print("========== FTP OK ==========")
 
     return ftp
 
