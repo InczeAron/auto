@@ -9,7 +9,7 @@ from email.message import EmailMessage
 from playwright.sync_api import sync_playwright
 
 # =========================
-# SEEN LINKS (JSON FÁJL KEZELÉS)
+# SEEN LINKS (JSON FÁJL KEZELÉS) - ZAI
 # =========================
 SEEN_DIR = Path("seen_links")
 SEEN_DIR.mkdir(exist_ok=True)
