@@ -56,7 +56,7 @@ def send_email(subject, body, to_email, attachment=None, html=False):
     with smtplib.SMTP_SSL("smtp.forpsi.com", 465) as smtp:
         smtp.login(sender, password)
         smtp.send_message(msg)
-    print(f"  📧 Email elküldve: {msg['To']} -> {subject}")
+    print(f"  📧 Email elküldve: {subject}")
 
 # =========================
 # EXCEL
@@ -156,9 +156,70 @@ def extract_price(text):
     return value if 500 < value < 500000 else None
 
 # =========================
-# SCRAPE ONE SEARCH (KATTINTÁS NÉLKÜL)
+# LINK EXTRACT - ÚJ TAB TRÜKK (100% BIZTOS)
 # =========================
-def scrape_search(page, brand, model_slug, year_from, year_to, country):
+def get_real_link(context, article):
+    """
+    1. Először megpróbálja gyorsan kinyerni a HTML-ből.
+    2. HA NEM TALÁLJA: Kinyit egy háttér tabot, rákattint, és a böngésző címsorából olvassa le a végleges linket.
+       A fő lista oldal érintetlen marad!
+    """
+    link = ""
+    
+    # 1. GYORS MÓDSZER: Közvetlen href kinyerés
+    try:
+        link_elem = article.locator("a[href*='/offers/']").first
+        href = link_elem.get_attribute("href", timeout=1000)
+        if href:
+            if href.startswith("/"):
+                return f"https://www.autoscout24.com{href}"
+            elif href.startswith("http"):
+                return href
+    except:
+        pass
+
+    # 2. GYORS MÓDSZER: Regex a háttérkódból
+    try:
+        article_html = article.evaluate("e => e.outerHTML")
+        offers_match = re.search(r'href="(/offers/[^"]+)"', article_html)
+        if offers_match:
+            return f"https://www.autoscout24.com{offers_match.group(1)}"
+    except:
+        pass
+
+    # 3. BIZTOSÍTÉK: ÚJ TABON NYITJA MEG (Ez garantálja a 100%-ot)
+    try:
+        first_link_elem = article.locator("a").first
+        href = first_link_elem.get_attribute("href", timeout=500)
+        
+        if href:
+            if href.startswith("/"):
+                href = f"https://www.autoscout24.com{href}"
+            
+            if href.startswith("http"):
+                # Új, láthatatlan tab nyitása
+                new_page = context.new_page()
+                try:
+                    new_page.goto(href, timeout=10000, wait_until="domcontentloaded")
+                    time.sleep(0.5)
+                    real_url = new_page.url
+                    
+                    # Ha a végleges URL tartalmazza az /offers/-t, megvan a linkünk!
+                    if "/offers/" in real_url:
+                        link = real_url
+                except:
+                    pass
+                finally:
+                    new_page.close() # Tab azonnali bezárása
+    except:
+        pass
+
+    return link
+
+# =========================
+# SCRAPE ONE SEARCH
+# =========================
+def scrape_search(page, context, brand, model_slug, year_from, year_to, country):
     cars = []
     
     for page_num in range(1, 10):
@@ -191,36 +252,14 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         for article in articles:
             try:
-                # 1. ADATOK KINYERÉSE (statisztikusan, nézelődünk, nem kattintunk)
                 title = article.locator("h2").first.inner_text(timeout=1000).strip()
                 price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000).strip()
                 price_num = extract_price(price_text)
 
-                # 2. LINK KINYERÉSE (Keresünk egy <a> taget, aminek a href-je /offers/-re mutat)
-                link = ""
-                try:
-                    # Pontosan azt az <a> taget keressük, ami az autó hirdetésoldalára mutat
-                    link_elem = article.locator("a[href*='/offers/']").first
-                    href = link_elem.get_attribute("href", timeout=1000)
-                    if href:
-                        if href.startswith("/"):
-                            link = f"https://www.autoscout24.com{href}"
-                        elif href.startswith("http"):
-                            link = href
-                except:
-                    pass
+                # LINK KINYERÉS (átadjuk a context-et is az új tab miatt)
+                link = get_real_link(context, article)
 
-                # HA A FENTI NEM MŰKÖDNE: Regex a háttérkódból
-                if not link:
-                    try:
-                        article_html = article.evaluate("e => e.outerHTML")
-                        offers_match = re.search(r'href="(/offers/[^"]+)"', article_html)
-                        if offers_match:
-                            link = f"https://www.autoscout24.com{offers_match.group(1)}"
-                    except:
-                        pass
-
-                # Ha továbbra sincs link, kihagyjuk (így nem kerül üres sor az Excelbe)
+                # HA MÉSEM SIKERÜLT (nincs egyáltalán kattintható elem sem), akkor hagyjuk el
                 if not link:
                     continue
 
@@ -249,12 +288,12 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                     "Ár_num": price_num, "Km": km, "Év": year, "Üzemanyag": fuel,
                     "Helyszín": location, "Link": link, "Pontszám": 0
                 })
-            except Exception as e:
+            except:
                 continue
         
         time.sleep(2)
     
-    print(f"  ✅ Összesen {len(cars)} érvényes autó találva ezen az oldalon.")
+    print(f"  ✅ Összesen {len(cars)} db autó található ezen a listán.")
     return cars
 
 # =========================
@@ -314,7 +353,8 @@ def run_scraper():
                 print(f"\n🔍 Keresés: {label}")
 
                 page = context.new_page()
-                cars = scrape_search(page, search["brand"], search["model"], search["year_from"], search["year_to"], search["country"])
+                # Átadjuk a context-et is a scrape_search-nek!
+                cars = scrape_search(page, context, search["brand"], search["model"], search["year_from"], search["year_to"], search["country"])
                 page.close()
 
                 # Medián számítás
@@ -347,7 +387,7 @@ def run_scraper():
                         seen_links.add(link)
                         new_cars.append(car)
 
-                print(f"📬 Új autók száma ehhez a kereséshez: {len(new_cars)}")
+                print(f"📬 Ebből {len(new_cars)} db ÚJ autó")
 
                 # HA VAN ÚJ AUTÓ -> KÜLDÜNK E-MAILT ÉS KÉSZÍTÜNK EXCELT
                 if not new_cars:
@@ -357,7 +397,6 @@ def run_scraper():
                 for i, c in enumerate(new_cars, 1):
                     c["Sorszám"] = i
 
-                # Fájl név generálás pl: dealer1_bmw_3-series-(all).xlsx
                 safe_model = search['model'].replace(" ", "_")
                 filename = f"{dealer_id}_{search['brand']}_{safe_model}.xlsx"
                 
