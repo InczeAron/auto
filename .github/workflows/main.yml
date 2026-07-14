@@ -55,5 +55,6 @@ jobs:
             echo "Nincs változás."
           else
             git commit -m "Update seen links"
+            git pull --rebase origin main
             git push origin HEAD:${{ github.ref_name }}
           fi

@@ -311,7 +311,7 @@ def run_scraper():
             "emails": ["aronincze@aronsoft.hu"],
             "searches": [
                 {"brand": "bmw",  "model": "3-series-(all)", "year_from": 2024, "year_to": 2026, "country": "D"},
-                {"brand": "audi", "model": "a6",             "year_from": 2024, "year_to": 2026, "country": "A"},
+                {"brand": "audi", "model": "a6",             "year_from": 2024, "year_to": 2026, "country": "D"},
             ]
         },
         {
