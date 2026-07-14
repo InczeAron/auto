@@ -9,7 +9,7 @@ from email.message import EmailMessage
 from playwright.sync_api import sync_playwright
 
 # =========================
-# SEEN LINKS (JSON FÁJL KEZELÉS) - ZAI
+# SEEN LINKS (JSON FÁJL KEZELÉS)
 # =========================
 SEEN_DIR = Path("seen_links")
 SEEN_DIR.mkdir(exist_ok=True)
@@ -156,65 +156,78 @@ def extract_price(text):
     return value if 500 < value < 500000 else None
 
 # =========================
-# LINK EXTRACT - CSAK VALÓS /offers/ LINKEK
+# LINK EXTRACT - KATTINTÁSSAL
 # =========================
-def extract_link(article):
-    """Kinyeri a linket - CSAK valós /offers/ URL-eket ad vissza."""
-    
-    # 1. MÓDSZER: Keresünk <a> taget ami /offers/-re mutat és VAN href-je
+def get_link_by_click(page, article, list_url):
+    """
+    Kattint az autóra, megnyitja az oldalt, kiolvassa a URL-t, majd visszamegy a listához.
+    """
     try:
-        anchors = article.locator("a").all()
-        for anchor in anchors:
-            try:
-                href = anchor.get_attribute("href", timeout=500)
-                if href and "/offers/" in href:
-                    # Teljes URL-e vagy relatív?
-                    if href.startswith("http"):
-                        # Validáljuk: autoscout24.com domain?
-                        if "autoscout24.com" in href:
-                            return href
-                    elif href.startswith("/offers/"):
-                        return f"https://www.autoscout24.com{href}"
-            except:
-                continue
-    except:
-        pass
-    
-    # 2. MÓDSZER: guid az outerHTML-ben (eredeti módszer)
-    try:
-        article_html = article.evaluate("e => e.outerHTML")
-        guid_match = re.search(r'guid=([a-f0-9-]{36})', article_html)
-        if guid_match:
-            return f"https://www.autoscout24.com/offers/{guid_match.group(1)}"
-    except:
-        pass
-    
-    # 3. MÓDSZER: /offers/ URL regex az outerHTML-ben
-    try:
-        article_html = article.evaluate("e => e.outerHTML")
-        offers_match = re.search(r'href="(/offers/[^"]+)"', article_html)
-        if offers_match:
-            return f"https://www.autoscout24.com{offers_match.group(1)}"
-    except:
-        pass
-    
-    # NEM találtunk valós linket
-    return ""
+        # Megkeressük a kattintható elemet az article-ban
+        click_target = article.locator("a").first
+        
+        # Ha van href és /offers/ tartalmaz, azt használjuk közvetlenül
+        try:
+            href = click_target.get_attribute("href", timeout=500)
+            if href and "/offers/" in href:
+                if href.startswith("/"):
+                    return f"https://www.autoscout24.com{href}"
+                elif href.startswith("http"):
+                    return href
+        except:
+            pass
+        
+        # Ha nem sikerült href-ből kinyerni, kattintunk és várunk
+        original_url = page.url
+        
+        with page.expect_navigation(timeout=15000) as navigation_info:
+            click_target.click()
+        
+        # Várjuk meg, hogy betöltődjön az új oldal
+        try:
+            navigation_info.value
+        except:
+            pass
+        
+        time.sleep(0.5)  # Kis várakozás
+        
+        # Kiolvassuk az aktuális URL-t
+        new_url = page.url
+        
+        # Visszamegyünk a listához
+        page.goto(list_url, timeout=20000, wait_until="domcontentloaded")
+        time.sleep(1)
+        
+        # Ha az URL /offers/ tartalmaz, az a jó link
+        if "/offers/" in new_url:
+            return new_url
+        
+        return ""
+        
+    except Exception as e:
+        # Hiba esetén próbálunk visszamenni a listához
+        try:
+            page.goto(list_url, timeout=20000, wait_until="domcontentloaded")
+            time.sleep(1)
+        except:
+            pass
+        return ""
 
 # =========================
 # SCRAPE ONE SEARCH
 # =========================
 def scrape_search(page, brand, model_slug, year_from, year_to, country):
     cars = []
-    no_link_count = 0
-    debug_shown = 0
+    
+    base_url = (f"https://www.autoscout24.com/lst/{brand}/{model_slug}"
+                f"?fregfrom={year_from}&fregto={year_to}&cy={country}")
     
     for page_num in range(1, 10):
+        list_url = f"{base_url}&page={page_num}"
         print(f"  📄 Oldal: {page_num}")
-        url = (f"https://www.autoscout24.com/lst/{brand}/{model_slug}"
-               f"?page={page_num}&fregfrom={year_from}&fregto={year_to}&cy={country}")
+        
         try:
-            page.goto(url, timeout=25000)
+            page.goto(list_url, timeout=25000)
         except Exception as e:
             print("❌ page.goto() hiba:", e)
             break
@@ -238,27 +251,21 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
 
         print(f"  → {len(articles)} hirdetés")
 
-        for article in articles:
+        for idx, article in enumerate(articles):
             try:
                 title = article.locator("h2").first.inner_text(timeout=1000).strip()
                 price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000).strip()
                 price_num = extract_price(price_text)
 
-                link = extract_link(article)
+                # LINK KINYERÉS - KATTINTÁSSAL
+                link = get_link_by_click(page, article, list_url)
                 
                 if not link:
-                    no_link_count += 1
-                    # DEBUG: Az első 3 link nélküli esetnél kiírjuk a HTML-t
-                    if debug_shown < 3:
-                        debug_shown += 1
-                        try:
-                            sample_html = article.evaluate("e => e.outerHTML")[:800]
-                            print(f"\n  🔍 DEBUG #{debug_shown} - Nincs link ehhez: {title[:50]}")
-                            print(f"  HTML: {sample_html}\n")
-                        except:
-                            pass
-                    continue  # ← LINK NÉLKÜLI AUTÓKAT KIHAGYJUK
+                    print(f"    ⚠️ Nem sikerült linket szerezni: {title[:40]}...")
+                    continue
                 
+                print(f"    ✅ {idx+1}. {title[:40]}... → {link[-20:]}")
+
                 km, year, fuel, location = None, "", "", ""
                 try:
                     for d in article.locator("span").all():
@@ -284,11 +291,11 @@ def scrape_search(page, brand, model_slug, year_from, year_to, country):
                     "Ár_num": price_num, "Km": km, "Év": year, "Üzemanyag": fuel,
                     "Helyszín": location, "Link": link, "Pontszám": 0
                 })
-            except: continue
+            except Exception as e:
+                print(f"    ❌ Hiba: {e}")
+                continue
+        
         time.sleep(2)
-    
-    if no_link_count > 0:
-        print(f"  ⚠️ {no_link_count} autó kihagyva (nincs érvényes link)")
     
     return cars
 
@@ -380,14 +387,14 @@ def run_scraper():
                             c["Pontszám"] = round((median - price) / median * 100)
                             c["Medián"] = median
 
-                # Csak a VALÓS linkkel rendelkező, még nem látott autókat mentjük
+                # Csak a még nem látott autókat mentjük
                 for car in cars:
                     link = car.get("Link")
                     if not link:
-                        continue  # Nem lehetett linket kinyerni, kihagyjuk
+                        continue
                     
                     if link in seen_links:
-                        continue  # Már láttuk, kihagyjuk
+                        continue
                     
                     seen_links.add(link)
                     car["Keresés"] = label
