@@ -156,68 +156,44 @@ def extract_price(text):
     return value if 500 < value < 500000 else None
 
 # =========================
-# LINK EXTRACT - A BÖNGÉSZŐ FIZIKAI MEGNYITÁSA ÚJ LAPON
+# LINK EXTRACT - PÁNCÉLOZOTT SHADOW DOM + CTRL+KATTINTÁS
 # =========================
-def get_real_link(context, article):
-    """
-    1. Próbálja JS-sel kinyerni (gyors)
-    2. HA NEM TALÁLJA: Kinyitja egy háttér tabon, kiolvassa a címsort, bezárja (100% biztos)
-    """
-    link = ""
-    
-    # 1. GYORS PRÓBÁLKOZÁS: A böngésző JS motorja kikeresi az <a> taget, és a .href automatikusan abszolút URL-t ad vissza
+def get_real_link(context, page, article):
+    # 1. Playwright locator (áthatol a Shadow DOM-on, amit a sima JS evaluate nem tud!)
     try:
-        link = article.evaluate("""el => {
-            let parentA = el.closest('a');
-            if (parentA && parentA.href && !parentA.href.includes('/lst/')) return parentA.href;
-            
-            let innerA = el.querySelector('a');
-            if (innerA && innerA.href && !innerA.href.includes('/lst/')) return innerA.href;
-            
-            return null;
-        }""")
-        if link and "autoscout24.com" in link:
-            return link
+        link_elem = article.locator("a").first
+        href = link_elem.get_attribute("href", timeout=1000)
+        if href and "/lst/" not in href and not href.startswith("javascript"):
+            if href.startswith("/"):
+                return f"https://www.autoscout24.com{href}"
+            elif href.startswith("http"):
+                return href
     except:
         pass
 
-    # 2. BIZTOSÍTÉK: FIZIKAI MEGNYITÁS EGY ÚJ TABON
+    # 2. BIZTOSÍTÉK: Ha a fenti nem találja, fizikailag Ctrl+kattintunk rá (új tab nyílik)
     try:
-        # JS utasítás: Keresd meg a linket a háttérben, és nyisd meg egy új ablakban
-        has_link = article.evaluate("""el => {
-            let a = el.closest('a') || el.querySelector('a');
-            if(a && a.href && !a.href.includes('/lst/') && !a.href.startsWith('javascript')) {
-                window.open(a.href, '_blank');
-                return true;
-            }
-            return false;
-        }""")
-
-        if has_link:
-            # Várjuk meg, hogy a böngészőben megnyíljon az új lap
-            new_page = context.wait_for_event("page", timeout=10000)
-            time.sleep(1) # Várunk egy picit, hogy a Chrome biztosan betöltse a végleges URL-t
+        with context.expect_page(timeout=5000) as new_page_info:
+            article.click(modifiers=["ControlOrMeta"])
             
-            # Kiolvassuk a böngésző címsorából a linket
-            real_url = new_page.url
-            
-            # Azonnal bezárjuk a hátterben lévő lapot (hogy ne foglaljon memóriát)
-            new_page.close()
-            
-            if "autoscout24.com" in real_url and len(real_url) > 40:
-                return real_url
-    except Exception as e:
-        # Ha valamiért hiba lenne a háttérablaknál, próbáljuk bezárni amit nyitottunk
+        new_page = new_page_info.value
+        time.sleep(1)
+        real_url = new_page.url
+        new_page.close()
+        
+        if "autoscout24.com" in real_url and len(real_url) > 40:
+            return real_url
+    except:
+        # Ha a Ctrl+kattintás mégsem nyitott új lapot, visszalépünk a listára, hogy ne törjön el
         try:
-            for p in context.pages:
-                if p != context.pages[0]: p.close()
+            page.go_back(wait_until="domcontentloaded", timeout=5000)
         except:
             pass
 
     return ""
 
 # =========================
-# SCRAPE ONE SEARCH
+# SCRAPE ONE SEARCH - PÁNCÉLOZOTT ADATKINYERÉS
 # =========================
 def scrape_search(page, context, brand, model_slug, year_from, year_to, country):
     cars = []
@@ -250,18 +226,45 @@ def scrape_search(page, context, brand, model_slug, year_from, year_to, country)
             print("⛔ Nincs találat!")
             break
 
+        print(f"  → {len(articles)} hirdetés vizsgálata...")
+
         for article in articles:
             try:
-                title = article.locator("h2").first.inner_text(timeout=1000).strip()
-                price_text = article.locator("[class*='Price']").first.inner_text(timeout=1000).strip()
-                price_num = extract_price(price_text)
-
-                # LINK KINYERÉS (Ha kell, fizikailag megnyitja az autót)
-                link = get_real_link(context, article)
-
+                # 1. LINK A LEGELSŐ (Ha nincs link, egyből ugrom a következőre)
+                link = get_real_link(context, page, article)
                 if not link:
                     continue
 
+                # 2. CÍM KINYERÉS (Többszörös biztonsági háló: h2 -> h3 -> első link szövege)
+                title = ""
+                try:
+                    title = article.locator("h2").first.inner_text(timeout=500).strip()
+                except:
+                    try:
+                        title = article.locator("h3").first.inner_text(timeout=500).strip()
+                    except:
+                        try:
+                            title = article.locator("a").first.inner_text(timeout=500).strip()
+                        except:
+                            pass 
+
+                # 3. ÁR KINYERÉS (Többszörös biztonsági háló: Price osztály -> Regex az egész szövegből)
+                price_text = ""
+                price_num = None
+                try:
+                    price_text = article.locator("[class*='Price']").first.inner_text(timeout=500).strip()
+                    price_num = extract_price(price_text)
+                except:
+                    try:
+                        all_text = article.inner_text(timeout=500)
+                        match = re.search(r'€\s*[\d.,]+', all_text)
+                        if match:
+                            price_text = match.group(0)
+                            price_num = extract_price(price_text)
+                    except:
+                        pass
+
+                # 4. TÖBBI ADAT
                 km, year, fuel, location = None, "", "", ""
                 try:
                     for d in article.locator("span").all():
@@ -292,7 +295,7 @@ def scrape_search(page, context, brand, model_slug, year_from, year_to, country)
         
         time.sleep(2)
     
-    print(f"  ✅ Összesen {len(cars)} db autó található ezen a listán.")
+    print(f"  ✅ Összesen {len(cars)} db autó mentve.")
     return cars
 
 # =========================
