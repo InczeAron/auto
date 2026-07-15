@@ -156,18 +156,30 @@ def extract_price(text):
     return value if 500 < value < 500000 else None
 
 # =========================
-# LINK EXTRACT - JAVÍTVA AZ ÚJ /details/ URL STRUKTÚRÁHOZ
+# LINK EXTRACT - AZ ÚJ AUTOSEO STRUKTÚRÁHOZ OPTIMALIZÁLVA
 # =========================
 def get_real_link(context, article):
     """
-    Az AutoScout megváltoztatta az URL-t /offers/-ról /details/-re.
-    Ez a függvény mindkettőt, illetve bármilyen más autós linket felismer.
+    1. Lépés: Megnézi az ARTICLE SZÜLŐJEIT (az új AutoScout így épül fel)
+    2. Lépés: Megnézi az ARTICLE BELSŐ linkjeit
+    3. Lépés: Háttérablakos kattintás, ha semmi más nem működik
     """
     link = ""
     
-    # 1. GYORS MÓDSZER: Közvetlen href kinyerés (offers VAGY details)
+    # 1. SZÜLŐ LINK KERESÉSE (AutoScout új szabványa: az <article> egy <a> tagen belül van)
     try:
-        for selector in ["a[href*='/offers/']", "a[href*='/details/']"]:
+        parent_href = article.evaluate("e => { let a = e.closest('a'); return a ? a.href : null; }")
+        if parent_href and "/lst/" not in parent_href:
+            if parent_href.startswith("/"):
+                return f"https://www.autoscout24.com{parent_href}"
+            elif parent_href.startswith("http"):
+                return parent_href
+    except:
+        pass
+
+    # 2. BELSŐ LINK KERESÉSE (Régebbi szabvány vagy speciális elemek)
+    try:
+        for selector in ["a[href*='/details/']", "a[href*='/offers/']"]:
             link_elem = article.locator(selector).first
             href = link_elem.get_attribute("href", timeout=1000)
             if href:
@@ -178,25 +190,37 @@ def get_real_link(context, article):
     except:
         pass
 
-    # 2. GYORS MÓDSZER: Regex a háttérkódból
+    # 3. BÁRMILYEN MÁS LINK AZ ARTICLE-BAN
     try:
-        article_html = article.evaluate("e => e.outerHTML")
-        match = re.search(r'href="(/(?:offers|details)/[^"]+)"', article_html)
+        link_elem = article.locator("a").first
+        href = link_elem.get_attribute("href", timeout=1000)
+        if href and "/lst/" not in href and not href.startswith("#") and not href.startswith("javascript:"):
+            if href.startswith("/"):
+                return f"https://www.autoscout24.com{href}"
+            elif href.startswith("http"):
+                return href
+    except:
+        pass
+
+    # 4. REGEX AZ ARTICLE ÉS SZÜLŐ HTML-JÉBEN
+    try:
+        # Keresünk egy kicsit nagyobb területen, háttérkódban
+        parent_html = article.evaluate("e => e.parentElement ? e.parentElement.outerHTML : e.outerHTML")
+        match = re.search(r'href="(/(?:offers|details)/[^"]+)"', parent_html)
         if match:
             return f"https://www.autoscout24.com{match.group(1)}"
     except:
         pass
-
-    # 3. BIZTOSÍTÉK: ÚJ TABON NYITJA MEG
+    
+    # 5. BIZTOSÍTÉK: Háttérablakos megnyitás
     try:
-        first_link_elem = article.locator("a").first
-        href = first_link_elem.get_attribute("href", timeout=500)
+        link_elem = article.locator("a").first
+        href = link_elem.get_attribute("href", timeout=500)
         
-        if href:
+        if href and not href.startswith("#") and not href.startswith("javascript:"):
             if href.startswith("/"):
                 href = f"https://www.autoscout24.com{href}"
             
-            # Csak akkor nyitjuk meg, ha nem a keresőoldalra mutat (/lst/)
             if href.startswith("http") and "/lst/" not in href:
                 new_page = context.new_page()
                 try:
@@ -204,7 +228,6 @@ def get_real_link(context, article):
                     time.sleep(0.5)
                     real_url = new_page.url
                     
-                    # Ha nem a főoldalra vagy a listára tért vissza, akkor ez az autó igazi linkje!
                     if "/lst/" not in real_url and len(real_url) > 40:
                         link = real_url
                 except:
