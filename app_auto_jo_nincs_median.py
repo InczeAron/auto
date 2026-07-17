@@ -59,13 +59,11 @@ def send_email(subject, body, to_email, attachment=None, html=False):
     print(f"  📧 Email elküldve: {subject}")
 
 # =========================
-# EXCEL - MEDIÁNNAL KIEGÉSZÍTVE
+# EXCEL
 # =========================
-def save_to_excel(cars, filename, medians=None):
+def save_to_excel(cars, filename):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
-
-    if not medians: medians = {}
 
     wb = Workbook()
     ws = wb.active
@@ -104,37 +102,11 @@ def save_to_excel(cars, filename, medians=None):
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[ws.cell(1, i).column_letter].width = w
 
-    # ==========================================
-    # 📊 MEDIÁN RÉSZ HOZZÁADÁSA AZ EXCELHEZ
-    # ==========================================
-    if medians:
-        median_row = len(cars) + 3
-        med_fill = PatternFill(start_color="2F4F6F", end_color="2F4F6F", fill_type="solid")
-        med_font_white = Font(bold=True, color="FFFFFF")
-        med_font_blue = Font(bold=True, color="1F3864")
-
-        title_cell = ws.cell(row=median_row, column=2, value="Medián ár évjárat szerint:")
-        title_cell.font = med_font_white
-        title_cell.fill = med_fill
-        title_cell.alignment = Alignment(horizontal="right")
-        ws.cell(row=median_row, column=1).fill = med_fill
-
-        for i, (year, median) in enumerate(sorted(medians.items(), reverse=True)):
-            r = median_row + 1 + i
-            
-            yr_cell = ws.cell(row=r, column=2, value=year)
-            yr_cell.font = med_font_blue
-            yr_cell.alignment = Alignment(horizontal="right")
-            
-            val_cell = ws.cell(row=r, column=3, value=f"{int(median):,} €".replace(",", "."))
-            val_cell.font = med_font_blue
-            val_cell.alignment = Alignment(horizontal="center")
-
     wb.save(filename)
     print(f"  📁 Excel mentve: {filename}")
 
 # =========================
-# HTML EMAIL - MEDIÁNNAL KIEGÉSZÍTVE
+# HTML EMAIL
 # =========================
 def build_email_html(cars, medians, search_label=""):
     html = f"""
@@ -162,21 +134,11 @@ def build_email_html(cars, medians, search_label=""):
         </tr>"""
     html += "</table>"
     
-    # ==========================================
-    # 📊 MEDIÁN RÉSZ HOZZÁADÁSA AZ EMAILHEZ
-    # ==========================================
     if medians:
-        html += """<br><table border="0" cellpadding="5" style="font-family:Arial; border: 2px solid #2f4f6f; border-radius: 5px; width: 300px;">
-                    <tr style="background-color:#2f4f6f; color:white;">
-                        <th colspan="2" style="text-align:left;">📊 Medián árak évjárat szerint</th>
-                    </tr>"""
+        html += "<br><h3>📊 Median prices by year</h3><ul>"
         for year, median in sorted(medians.items(), reverse=True):
-            formatted_median = f"{int(median):,} €".replace(",", ".")
-            html += f"""<tr style="border-bottom: 1px solid #eee;">
-                            <td style="font-weight:bold; color:#1F3864; text-align:right; padding-right:10px;">{year}</td>
-                            <td style="color:#333;">{formatted_median}</td>
-                        </tr>"""
-        html += "</table>"
+            html += f"<li>{year}: {int(median):,} €</li>".replace(",", ".")
+        html += "</ul>"
 
     html += "</body></html>"
     return html
@@ -194,7 +156,7 @@ def extract_price(text):
     return value if 500 < value < 500000 else None
 
 # =========================
-# LINK EXTRACT - PÁNCÉLOZOTT SHADOW DOM + CTRL+KATTINTÁS (SZERINTED JÓ, NEM NYÚLOK HOZZÁ)
+# LINK EXTRACT - PÁNCÉLOZOTT SHADOW DOM + CTRL+KATTINTÁS
 # =========================
 def get_real_link(context, page, article):
     # 1. Playwright locator (áthatol a Shadow DOM-on, amit a sima JS evaluate nem tud!)
@@ -231,7 +193,7 @@ def get_real_link(context, page, article):
     return ""
 
 # =========================
-# SCRAPE ONE SEARCH - PÁNCÉLOZOTT ADATKINYERÉS (SZERINTED JÓ, NEM NYÚLOK HOZZÁ)
+# SCRAPE ONE SEARCH - PÁNCÉLOZOTT ADATKINYERÉS
 # =========================
 def scrape_search(page, context, brand, model_slug, year_from, year_to, country):
     cars = []
@@ -286,7 +248,7 @@ def scrape_search(page, context, brand, model_slug, year_from, year_to, country)
                         except:
                             pass 
 
-                # 3. ÁR KINYERÉS (Többszörös biztonsági háló: Price osztály -> Regex az egész szögegből)
+                # 3. ÁR KINYERÉS (Többszörös biztonsági háló: Price osztály -> Regex az egész szövegből)
                 price_text = ""
                 price_num = None
                 try:
@@ -396,9 +358,7 @@ def run_scraper():
                 cars = scrape_search(page, context, search["brand"], search["model"], search["year_from"], search["year_to"], search["country"])
                 page.close()
 
-                # ==========================================
-                # MEDIÁN SZÁMÍTÁS (Szigorú középérték, NEM átlag!)
-                # ==========================================
+                # Medián számítás
                 cars_by_year, medians = {}, {}
                 for c in cars:
                     year, price = c.get("Év"), c.get("Ár_num")
@@ -410,12 +370,6 @@ def run_scraper():
                     prices.sort()
                     n = len(prices)
                     medians[y] = prices[n//2] if n % 2 == 1 else (prices[n//2 - 1] + prices[n//2]) / 2
-
-                # KONZOLBA KIÍRÁS
-                if medians:
-                    print("  📊 Évenkénti medián árak:")
-                    for y, m in sorted(medians.items(), reverse=True):
-                        print(f"     - {y}: {int(m):,} €".replace(",", "."))
 
                 # Pontszám számítás
                 for c in cars:
@@ -446,8 +400,7 @@ def run_scraper():
                 safe_model = search['model'].replace(" ", "_")
                 filename = f"{dealer_id}_{search['brand']}_{safe_model}.xlsx"
                 
-                # EXCEL ÉS EMAIL GENERÁLÁS (ÁTADJUK A MEDIÁNOKAT)
-                save_to_excel(new_cars, filename, medians)
+                save_to_excel(new_cars, filename)
 
                 email_html = build_email_html(new_cars, medians, label)
                 send_email(
