@@ -4,6 +4,7 @@ import smtplib
 import os
 import json
 import random
+import hashlib  # ← EZ KELL AZ UJJLENYOMATHOZ
 from pathlib import Path
 from email.message import EmailMessage
 from playwright.sync_api import sync_playwright
@@ -104,9 +105,7 @@ def save_to_excel(cars, filename, medians=None):
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[ws.cell(1, i).column_letter].width = w
 
-    # ==========================================
     # 📊 MEDIÁN RÉSZ HOZZÁADÁSA AZ EXCELHEZ
-    # ==========================================
     if medians:
         median_row = len(cars) + 3
         med_fill = PatternFill(start_color="2F4F6F", end_color="2F4F6F", fill_type="solid")
@@ -162,9 +161,7 @@ def build_email_html(cars, medians, search_label=""):
         </tr>"""
     html += "</table>"
     
-    # ==========================================
     # 📊 MEDIÁN RÉSZ HOZZÁADÁSA AZ EMAILHEZ
-    # ==========================================
     if medians:
         html += """<br><table border="0" cellpadding="5" style="font-family:Arial; border: 2px solid #2f4f6f; border-radius: 5px; width: 300px;">
                     <tr style="background-color:#2f4f6f; color:white;">
@@ -194,10 +191,9 @@ def extract_price(text):
     return value if 500 < value < 500000 else None
 
 # =========================
-# LINK EXTRACT - PÁNCÉLOZOTT SHADOW DOM + CTRL+KATTINTÁS (SZERINTED JÓ, NEM NYÚLOK HOZZÁ)
+# LINK EXTRACT - PÁNCÉLOZOTT SHADOW DOM + CTRL+KATTINTÁS
 # =========================
 def get_real_link(context, page, article):
-    # 1. Playwright locator (áthatol a Shadow DOM-on, amit a sima JS evaluate nem tud!)
     try:
         link_elem = article.locator("a").first
         href = link_elem.get_attribute("href", timeout=1000)
@@ -209,7 +205,6 @@ def get_real_link(context, page, article):
     except:
         pass
 
-    # 2. BIZTOSÍTÉK: Ha a fenti nem találja, fizikailag Ctrl+kattintunk rá (új tab nyílik)
     try:
         with context.expect_page(timeout=5000) as new_page_info:
             article.click(modifiers=["ControlOrMeta"])
@@ -222,7 +217,6 @@ def get_real_link(context, page, article):
         if "autoscout24.com" in real_url and len(real_url) > 40:
             return real_url
     except:
-        # Ha a Ctrl+kattintás mégsem nyitott új lapot, visszalépünk a listára, hogy ne törjön el
         try:
             page.go_back(wait_until="domcontentloaded", timeout=5000)
         except:
@@ -231,7 +225,30 @@ def get_real_link(context, page, article):
     return ""
 
 # =========================
-# SCRAPE ONE SEARCH - PÁNCÉLOZOTT ADATKINYERÉS (SZERINTED JÓ, NEM NYÚLOK HOZZÁ)
+# AUTO UJJLENYOMAT KÉSZÍTÉSE (Duplikáció szűrésére)
+# =========================
+def get_car_fingerprint(link, title, price_num, km):
+    """
+    Kinyeri az autó egyedi ID-ját a linkből. 
+    Ha nem talál ID-t, akkor a Cím+Km+Ár alapján generál egy egyedi kódot.
+    """
+    # 1. Próbáljuk megkeresni az AutoScout GUID azonosítót
+    guid_match = re.search(r'([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})', link, re.I)
+    if guid_match:
+        return f"ID_{guid_match.group(1)}"
+
+    # 2. Próbáljuk megkeresni a numerikus azonosítót a link végén
+    num_match = re.search(r'(\d{7,})', link)
+    if num_match:
+        return f"ID_{num_match.group(1)}"
+
+    # 3. HA NINCS KINYERHETŐ ID: Cím + Kilométer + Ár alapján csinálunk egy "ujjlenyomatot"
+    raw_string = f"{title}_{km}_{price_num}".strip().lower()
+    hash_code = hashlib.md5(raw_string.encode('utf-8')).hexdigest()
+    return f"FP_{hash_code}"
+
+# =========================
+# SCRAPE ONE SEARCH - PÁNCÉLOZOTT ADATKINYERÉS
 # =========================
 def scrape_search(page, context, brand, model_slug, year_from, year_to, country):
     cars = []
@@ -268,12 +285,10 @@ def scrape_search(page, context, brand, model_slug, year_from, year_to, country)
 
         for article in articles:
             try:
-                # 1. LINK A LEGELSŐ (Ha nincs link, egyből ugrom a következőre)
                 link = get_real_link(context, page, article)
                 if not link:
                     continue
 
-                # 2. CÍM KINYERÉS (Többszörös biztonsági háló: h2 -> h3 -> első link szövege)
                 title = ""
                 try:
                     title = article.locator("h2").first.inner_text(timeout=500).strip()
@@ -286,7 +301,6 @@ def scrape_search(page, context, brand, model_slug, year_from, year_to, country)
                         except:
                             pass 
 
-                # 3. ÁR KINYERÉS (Többszörös biztonsági háló: Price osztály -> Regex az egész szögegből)
                 price_text = ""
                 price_num = None
                 try:
@@ -302,7 +316,6 @@ def scrape_search(page, context, brand, model_slug, year_from, year_to, country)
                     except:
                         pass
 
-                # 4. TÖBBI ADAT
                 km, year, fuel, location = None, "", "", ""
                 try:
                     for d in article.locator("span").all():
@@ -386,7 +399,7 @@ def run_scraper():
             context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
             seen_links = load_seen_links(dealer_id)
-            print(f"🔍 Ismert linkek száma: {len(seen_links)}")
+            print(f"🔍 Ismert autók száma: {len(seen_links)}")
 
             for search in dealer["searches"]:
                 label = f"{search['brand']} {search['model']} ({search['country']})"
@@ -396,9 +409,7 @@ def run_scraper():
                 cars = scrape_search(page, context, search["brand"], search["model"], search["year_from"], search["year_to"], search["country"])
                 page.close()
 
-                # ==========================================
-                # MEDIÁN SZÁMÍTÁS (Szigorú középérték, NEM átlag!)
-                # ==========================================
+                # Medián számítás
                 cars_by_year, medians = {}, {}
                 for c in cars:
                     year, price = c.get("Év"), c.get("Ár_num")
@@ -411,7 +422,6 @@ def run_scraper():
                     n = len(prices)
                     medians[y] = prices[n//2] if n % 2 == 1 else (prices[n//2 - 1] + prices[n//2]) / 2
 
-                # KONZOLBA KIÍRÁS
                 if medians:
                     print("  📊 Évenkénti medián árak:")
                     for y, m in sorted(medians.items(), reverse=True):
@@ -426,12 +436,23 @@ def run_scraper():
                         if median:
                             c["Pontszám"] = round((median - price) / median * 100)
 
-                # KIVÁLOGATÁS: Csak az ÚJ autók
+                # KIVÁLOGATÁS: Csak az ÚJ autók (Ujjlenyomat alapján!)
                 new_cars = []
                 for car in cars:
                     link = car.get("Link")
-                    if link and link not in seen_links:
-                        seen_links.add(link)
+                    if not link: continue
+                    
+                    # Ujjlenyomat generálása
+                    fingerprint = get_car_fingerprint(
+                        link, 
+                        car.get("Cím", ""), 
+                        car.get("Ár_num"), 
+                        car.get("Km")
+                    )
+                    
+                    # Csak akkor tesszük a listába, ha ezt az ujjlenyomatot még nem láttuk
+                    if fingerprint not in seen_links:
+                        seen_links.add(fingerprint)
                         new_cars.append(car)
 
                 print(f"📬 Ebből {len(new_cars)} db ÚJ autó")
@@ -446,7 +467,6 @@ def run_scraper():
                 safe_model = search['model'].replace(" ", "_")
                 filename = f"{dealer_id}_{search['brand']}_{safe_model}.xlsx"
                 
-                # EXCEL ÉS EMAIL GENERÁLÁS (ÁTADJUK A MEDIÁNOKAT)
                 save_to_excel(new_cars, filename, medians)
 
                 email_html = build_email_html(new_cars, medians, label)
